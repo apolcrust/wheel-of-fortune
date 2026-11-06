@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PAGES_BASE_PATH: ${{ github.event.repository.name == format('{0}.github.io', github.repository_owner) && '/' || format('/{0}/', github.event.repository.name) }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -29,6 +31,10 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Validate Supabase configuration
+        run: |
+          test -n "$VITE_SUPABASE_URL" || (echo "Add VITE_SUPABASE_URL as a repository Actions secret." && exit 1)
+          test -n "$VITE_SUPABASE_PUBLISHABLE_KEY" || (echo "Add VITE_SUPABASE_PUBLISHABLE_KEY as a repository Actions secret." && exit 1)
       - name: Run tests
         run: npm test
       - name: Build site

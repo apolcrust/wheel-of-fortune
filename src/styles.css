@@ -181,6 +181,16 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
 .toast-error svg { color: #e18b7e; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 .storage-warning { margin-top: 10px; padding: 8px 12px; border: 1px solid #69413c; border-radius: 6px; color: #e8afa4; background: #2c201f; font-size: 11px; }
+.cloud-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.cloud-panel { width: min(440px, 100%); display: grid; justify-items: start; gap: 16px; padding: 30px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.cloud-panel h1 { margin: -5px 0 0; color: var(--gold-light); font: 600 26px/1.2 "Playfair Display", Georgia, serif; }
+.cloud-panel p { margin: 0; color: #aaa3a6; font-size: 13px; line-height: 1.55; }
+.cloud-form { width: 100%; display: grid; gap: 14px; }
+.cloud-form .button, .cloud-panel > .button { width: 100%; }
+.cloud-error { color: #f0b4a9 !important; }
+.cloud-signout { justify-self: center; }
+.cloud-back-link { color: #cabb9d; font-size: 12px; text-decoration: none; }
+.cloud-back-link:hover { text-decoration: underline; }
 .settings-fields { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
 .file-button.is-disabled { cursor: not-allowed; opacity: .48; }
 .loading-screen, .fatal-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #b5aead; }

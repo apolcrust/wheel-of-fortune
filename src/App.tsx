@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import type * as XLSX from "xlsx";
 import {
   Check, ChevronDown, CircleHelp, Clock3, Download, FileSpreadsheet, Fullscreen,
@@ -11,6 +12,8 @@ import type { AppData, Participant, WheelSettings, Winner } from "./types";
 import { DEFAULT_DATA, DEFAULT_SETTINGS } from "./types";
 import { Wheel, type WheelHandle } from "./Wheel";
 import { useOperatorShortcut } from "./operatorShortcut";
+import { supabase } from "./supabaseClient";
+import type { Session } from "@supabase/supabase-js";
 
 type Dialog = "participants" | "import" | "settings" | "history" | null;
 type Toast = { id: number; message: string; tone: "success" | "error" };
@@ -69,9 +72,16 @@ function WinnerAnnouncement({ winner, confetti, autoRemove, onClose }: {
 function App() {
   const basePath = import.meta.env.BASE_URL.replace(/\/+$/, "");
   const currentPath = window.location.pathname.replace(/\/+$/, "");
+  const searchParams = new URLSearchParams(window.location.search);
+  const eventId = searchParams.get("event");
   const isOperator = currentPath === "/operator" ||
-    (new URLSearchParams(window.location.search).get("view") === "operator" && currentPath === basePath);
+    (searchParams.get("view") === "operator" && currentPath === basePath);
   const [data, setData] = useState<AppData>(DEFAULT_DATA);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(!!supabase);
+  const [authEmail, setAuthEmail] = useState("");
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [eventOwnerId, setEventOwnerId] = useState<string | null>(null);
   const [remoteBusy, setRemoteBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [storageError, setStorageError] = useState("");
@@ -98,11 +108,37 @@ function App() {
   const tabId = useRef(crypto.randomUUID());
   const receivedDataRef = useRef<AppData | null>(null);
   const receivedBroadcastRef = useRef(false);
+  const [operationPending, setOperationPending] = useState(false);
 
   const notify = useCallback((message: string, tone: Toast["tone"] = "success") => {
     const id = ++toastSequence.current;
     setToasts((current) => [...current, { id, message, tone }]);
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 4000);
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+    supabase.auth.getSession().then(({ data: result, error }) => {
+      if (error) throw error;
+      if (active) {
+        setSession(result.session);
+        setAuthLoading(false);
+      }
+    }).catch((error: unknown) => {
+      if (active) {
+        setStorageError(error instanceof Error ? error.message : "Could not check the operator sign-in session.");
+        setAuthLoading(false);
+      }
+    });
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -131,6 +167,39 @@ function App() {
 
   useEffect(() => {
     let active = true;
+    if (supabase) {
+      if (!eventId || (isOperator && authLoading) || (isOperator && !session)) {
+        setReady(true);
+        return () => { active = false; };
+      }
+      setReady(false);
+      void (async () => {
+        try {
+          const { data: row, error } = await supabase.from("wheel_events")
+            .select("id, owner_id, data, is_spinning")
+            .eq("id", eventId)
+            .maybeSingle();
+          if (error) throw error;
+          if (!row) throw new Error("This shared wheel event was not found or is no longer available.");
+          const remoteData = validateData(row.data);
+          if (active) {
+            receivedDataRef.current = remoteData;
+            setData(remoteData);
+            setCustomPalette(remoteData.settings.colors.join(", "));
+            setEventOwnerId(row.owner_id);
+            setRemoteBusy(row.is_spinning);
+            setReady(true);
+          }
+        } catch (error) {
+          if (active) {
+            setStorageError(error instanceof Error ? error.message : "Could not load the shared wheel event.");
+            setReady(true);
+          }
+        }
+      })();
+      return () => { active = false; };
+    }
+
     loadData().then((stored) => {
       if (active) {
         if (!receivedBroadcastRef.current) {
@@ -147,23 +216,75 @@ function App() {
       }
     });
     return () => { active = false; };
-  }, []);
+  }, [eventId, isOperator, authLoading, session?.user.id]);
+
+  useEffect(() => {
+    const remoteClient = supabase;
+    if (!remoteClient || !eventId || !ready || !eventOwnerId) return;
+    const channel = remoteClient.channel(`wheel-event-${eventId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "wheel_events",
+        filter: `id=eq.${eventId}`,
+      }, (payload) => {
+        if (payload.eventType === "DELETE") return;
+        const row = payload.new as { owner_id: string; data: unknown; is_spinning: boolean };
+        try {
+          const remoteData = validateData(row.data);
+          receivedDataRef.current = remoteData;
+          setData((current) => JSON.stringify(current) === JSON.stringify(remoteData) ? current : remoteData);
+          setEventOwnerId(row.owner_id);
+          setRemoteBusy(row.is_spinning);
+        } catch (error) {
+          setStorageError(error instanceof Error ? error.message : "The shared wheel data is invalid.");
+        }
+      }).subscribe((status, error) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setStorageError(error?.message ?? "Live updates could not connect. Refresh to try again.");
+        }
+      });
+    return () => { void remoteClient.removeChannel(channel); };
+  }, [eventId, ready, eventOwnerId]);
 
   useEffect(() => {
     if (!ready) return;
-    if (receivedDataRef.current === data) {
+    const receivedRemoteData = receivedDataRef.current === data;
+    if (receivedRemoteData) {
       receivedDataRef.current = null;
-      return;
     }
-    receivedDataRef.current = null;
-    saveQueue.current = saveQueue.current.catch(() => undefined).then(async () => {
-      await saveData(data);
-      channelRef.current?.postMessage({ sender: tabId.current, type: "data", data });
-    }).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : "Your changes could not be saved.";
-      setStorageError(message);
-    });
-  }, [data, ready]);
+    if (!receivedRemoteData) receivedDataRef.current = null;
+    if (!supabase) {
+      saveQueue.current = saveQueue.current.catch(() => undefined).then(async () => {
+        await saveData(data);
+        channelRef.current?.postMessage({ sender: tabId.current, type: "data", data });
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Your changes could not be saved.";
+        setStorageError(message);
+      });
+    }
+    const remoteClient = supabase;
+    if (remoteClient && eventId && isOperator && session?.user.id === eventOwnerId && !receivedRemoteData) {
+      const saveTimer = window.setTimeout(() => {
+        void (async () => {
+          try {
+            const { data: result, error } = await remoteClient.from("wheel_events")
+              .update({ data, updated_at: new Date().toISOString() })
+              .eq("id", eventId)
+              .eq("owner_id", session.user.id)
+              .select("id")
+              .maybeSingle();
+            if (error) throw error;
+            if (!result) throw new Error("This account is not allowed to update this wheel event.");
+            setStorageError("");
+          } catch (error) {
+            setStorageError(error instanceof Error ? error.message : "The shared wheel could not be saved.");
+          }
+        })();
+      }, 250);
+      return () => window.clearTimeout(saveTimer);
+    }
+  }, [data, ready, eventId, isOperator, session?.user.id, eventOwnerId]);
 
   useEffect(() => {
     if (!capturingShortcut) return;
@@ -227,11 +348,31 @@ function App() {
       return;
     }
     setBusy(true);
-    channelRef.current?.postMessage({ sender: tabId.current, type: "spin", busy: true });
+    if (!supabase) channelRef.current?.postMessage({ sender: tabId.current, type: "spin", busy: true });
     setLastWinner(null);
     try {
-      const mode = override >= 0 ? "controlled" : "random";
-      const index = override >= 0 ? override : pickRandomIndex(data.participants);
+      let mode: Winner["mode"];
+      let index: number;
+      let spinId: string | null = null;
+      if (supabase && eventId) {
+        const { data: result, error } = await supabase.rpc("begin_wheel_spin", { p_event_id: eventId });
+        if (error) throw error;
+        if (!result || typeof result !== "object") throw new Error("The shared wheel returned an invalid spin selection.");
+        const selection = result as { spinId?: unknown; participantId?: unknown; mode?: unknown };
+        if (typeof selection.spinId !== "string" ||
+            typeof selection.participantId !== "string" ||
+            (selection.mode !== "random" && selection.mode !== "controlled")) {
+          throw new Error("The shared wheel returned an invalid spin selection.");
+        }
+        spinId = selection.spinId;
+        index = data.participants.findIndex((person) => person.id === selection.participantId);
+        if (index < 0) throw new Error("The selected participant is no longer on the wheel. Refresh and try again.");
+        mode = selection.mode;
+        setRemoteBusy(true);
+      } else {
+        mode = override >= 0 ? "controlled" : "random";
+        index = override >= 0 ? override : pickRandomIndex(data.participants);
+      }
       const selected = data.participants[index];
       if (data.settings.sound) {
         try { playTone(220, 0.18, 0.45); }
@@ -239,6 +380,23 @@ function App() {
       }
       const start = wheelRef.current?.rotation ?? 0;
       await wheelRef.current?.spinTo(targetRotation(start, index, data.participants.length, data.settings.rotations), data.settings.duration * 1000);
+      if (supabase && eventId && spinId) {
+        const { data: completedData, error } = await supabase.rpc("finish_wheel_spin", {
+          p_event_id: eventId,
+          p_spin_id: spinId,
+        });
+        if (error) throw error;
+        const completed = validateData(completedData);
+        receivedDataRef.current = completed;
+        setData(completed);
+        setLastWinner(completed.winners[0] ?? null);
+        setRemoteBusy(false);
+        if (completed.settings.sound) {
+          try { playTone(660, 0.55, 0.85); }
+          catch (error) { notify(error instanceof Error ? error.message : "Winner sound could not be played.", "error"); }
+        }
+        return;
+      }
       const record: Winner = {
         participant: selected,
         spinNumber: data.winners.length + 1,
@@ -262,7 +420,7 @@ function App() {
       notify(message, "error");
     } finally {
       setBusy(false);
-      channelRef.current?.postMessage({ sender: tabId.current, type: "spin", busy: false });
+      if (!supabase) channelRef.current?.postMessage({ sender: tabId.current, type: "spin", busy: false });
     }
   };
 
@@ -422,6 +580,67 @@ function App() {
     notify(`${record.participant.name} restored to the wheel.`);
   };
 
+  const sendMagicLink = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase || !authEmail.trim()) return;
+    setOperationPending(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: authEmail.trim(),
+        options: { emailRedirectTo: window.location.href },
+      });
+      if (error) throw error;
+      setMagicLinkSent(true);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The sign-in email could not be sent.", "error");
+    } finally {
+      setOperationPending(false);
+    }
+  };
+
+  const createSharedEvent = async () => {
+    if (!supabase || !session) return;
+    setOperationPending(true);
+    try {
+      const { data: row, error } = await supabase.from("wheel_events")
+        .insert({ owner_id: session.user.id, data: structuredClone(DEFAULT_DATA) })
+        .select("id")
+        .single();
+      if (error) throw error;
+      const url = new URL(import.meta.env.BASE_URL, window.location.origin);
+      url.searchParams.set("view", "operator");
+      url.searchParams.set("event", row.id);
+      window.location.assign(url);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The shared event could not be created.", "error");
+    } finally {
+      setOperationPending(false);
+    }
+  };
+
+  const signOutOperator = async () => {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) notify(error.message, "error");
+    else setSession(null);
+  };
+
+  const sharedUrl = (operatorView: boolean) => {
+    const url = new URL(import.meta.env.BASE_URL, window.location.origin);
+    if (eventId) url.searchParams.set("event", eventId);
+    if (operatorView) url.searchParams.set("view", "operator");
+    return url.toString();
+  };
+
+  const copySharedLink = async (operatorView: boolean) => {
+    try {
+      await navigator.clipboard.writeText(sharedUrl(operatorView));
+      notify(`${operatorView ? "Operator" : "Audience"} link copied.`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not copy the audience link.", "error");
+    }
+  };
+
   const toggleFullscreen = async () => {
     try {
       if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
@@ -433,6 +652,66 @@ function App() {
 
   const filteredWinners = data.winners.filter((record) =>
     record.participant.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+
+  if (supabase && isOperator && authLoading) {
+    return <main className="loading-screen"><LoaderCircle className="spin-loader" /><span>Checking operator sign-in…</span></main>;
+  }
+  if (supabase && isOperator && !session) {
+    return <main className="cloud-shell"><section className="cloud-panel">
+      <div className="brand-mark"><LockKeyhole size={20} /></div>
+      <div className="eyebrow">OPERATOR ACCESS</div>
+      <h1>Sign in to manage your wheel</h1>
+      {magicLinkSent ? <p>Check your inbox for a secure sign-in link. Open it on this device to continue.</p> :
+        <form className="cloud-form" onSubmit={(event) => void sendMagicLink(event)}>
+          <label className="setting-field"><span>Email address</span><input type="email" autoComplete="email" required value={authEmail}
+            onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
+          <button className="button button-primary" disabled={operationPending || !authEmail.trim()}>
+            {operationPending ? "Sending link…" : "Email me a sign-in link"}
+          </button>
+        </form>}
+      {storageError && <p className="cloud-error" role="alert">{storageError}</p>}
+      <a className="cloud-back-link" href={import.meta.env.BASE_URL}>Return to audience screen</a>
+    </section></main>;
+  }
+  if (supabase && isOperator && session && !eventId) {
+    return <main className="cloud-shell"><section className="cloud-panel">
+      <div className="brand-mark"><Sparkles size={20} /></div>
+      <div className="eyebrow">SHARED EVENT</div>
+      <h1>Create a wheel event</h1>
+      <p>Create an event to get a shareable audience link. This signed-in account will own its operator controls.</p>
+      {storageError && <p className="cloud-error" role="alert">{storageError}</p>}
+      <button className="button button-primary" disabled={operationPending} onClick={() => void createSharedEvent()}>
+        {operationPending ? "Creating event…" : "Create event"}
+      </button>
+      <button className="text-button cloud-signout" onClick={() => void signOutOperator()}>Sign out ({session.user.email})</button>
+    </section></main>;
+  }
+  if (supabase && !isOperator && !eventId) {
+    return <main className="cloud-shell"><section className="cloud-panel">
+      <div className="brand-mark"><Sparkles size={20} /></div>
+      <div className="eyebrow">AUDIENCE SCREEN</div>
+      <h1>Open a shared wheel</h1>
+      <p>Use the audience link shared by the event operator to join the live wheel.</p>
+    </section></main>;
+  }
+  if (supabase && eventId && ready && !eventOwnerId) {
+    return <main className="cloud-shell"><section className="cloud-panel">
+      <div className="brand-mark"><CircleHelp size={20} /></div>
+      <div className="eyebrow">SHARED EVENT</div>
+      <h1>Could not open this wheel</h1>
+      <p role="alert">{storageError || "The event is unavailable. Check the link and try again."}</p>
+      <a className="button button-outline" href={import.meta.env.BASE_URL}>Return to home</a>
+    </section></main>;
+  }
+  if (supabase && isOperator && eventOwnerId && eventOwnerId !== session?.user.id) {
+    return <main className="cloud-shell"><section className="cloud-panel">
+      <div className="brand-mark"><LockKeyhole size={20} /></div>
+      <div className="eyebrow">OPERATOR ACCESS</div>
+      <h1>This event belongs to another account</h1>
+      <p>Sign in with the account that created this wheel event.</p>
+      <button className="button button-outline" onClick={() => void signOutOperator()}>Sign out</button>
+    </section></main>;
+  }
 
   if (storageError && !ready) {
     return <main className="fatal-screen"><ShieldCheck size={42} /><h1>Local storage unavailable</h1>
@@ -451,7 +730,7 @@ function App() {
           <span>FORTUNE<span className="brand-muted"> / WHEEL</span></span>
         </div>
         <div className="public-top-actions">
-          <button className="button button-outline" disabled={spinLocked} onClick={() => setDialog("settings")}><Settings2 size={16} /> Settings</button>
+          {!supabase && <button className="button button-outline" disabled={spinLocked} onClick={() => setDialog("settings")}><Settings2 size={16} /> Settings</button>}
           <button className="icon-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => void toggleFullscreen()}>
             <Fullscreen size={18} />
           </button>
@@ -491,7 +770,7 @@ function App() {
                 <span className="participant-color" style={{ background: data.settings.colors[index % data.settings.colors.length] }} />
                 <span>{person.name}</span><small>{person.weight > 1 ? `×${person.weight}` : ""}</small>
               </li>)}</ul>}
-            <button className="button button-quiet public-detail-action" disabled={spinLocked} onClick={() => setDialog("participants")}><ListPlus size={15} /> Manage participants</button>
+            {!supabase && <button className="button button-quiet public-detail-action" disabled={spinLocked} onClick={() => setDialog("participants")}><ListPlus size={15} /> Manage participants</button>}
           </section>
           <section className="public-detail-card">
             <div className="public-card-heading"><div><span className="card-overline">DRAW RECORD</span><h2>Winner history</h2></div>
@@ -608,7 +887,12 @@ function App() {
           <span className="brand-mark"><Sparkles size={20} /></span><span>FORTUNE<span className="brand-muted"> / WHEEL</span></span>
         </a>
         <div className="topbar-actions">
-          <button className="button button-outline" onClick={() => window.open(import.meta.env.BASE_URL, "_blank", "noopener,noreferrer")}>Open audience screen</button>
+          {supabase && eventId && <>
+            <button className="button button-outline" onClick={() => void copySharedLink(false)}><Download size={15} /> Copy audience link</button>
+            <button className="button button-outline" onClick={() => void copySharedLink(true)}><Download size={15} /> Copy operator link</button>
+          </>}
+          <button className="button button-outline" onClick={() => window.open(supabase && eventId ? sharedUrl(false) : import.meta.env.BASE_URL, "_blank", "noopener,noreferrer")}>Open audience screen</button>
+          {supabase && session && <button className="text-button" onClick={() => void signOutOperator()}>Sign out</button>}
           <button className="icon-button" title={data.settings.sound ? "Mute sounds" : "Enable sounds"} aria-label="Toggle sound"
             onClick={() => updateSettings({ sound: !data.settings.sound })}>
             {data.settings.sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
