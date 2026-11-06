@@ -12,7 +12,7 @@ import type { AppData, Participant, WheelSettings, Winner } from "./types";
 import { DEFAULT_DATA, DEFAULT_SETTINGS } from "./types";
 import { Wheel, type WheelHandle } from "./Wheel";
 import { useOperatorShortcut } from "./operatorShortcut";
-import { supabase } from "./supabaseClient";
+import { supabase, supabaseConfigurationError } from "./supabaseClient";
 import type { Session } from "@supabase/supabase-js";
 
 type Dialog = "participants" | "import" | "settings" | "history" | null;
@@ -653,6 +653,14 @@ function App() {
   const filteredWinners = data.winners.filter((record) =>
     record.participant.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
 
+  if (supabaseConfigurationError) {
+    return <main className="cloud-shell"><section className="cloud-panel">
+      <div className="brand-mark"><CircleHelp size={20} /></div>
+      <div className="eyebrow">APP CONFIGURATION</div>
+      <h1>Supabase setup needs attention</h1>
+      <p role="alert">{supabaseConfigurationError}</p>
+    </section></main>;
+  }
   if (supabase && isOperator && authLoading) {
     return <main className="loading-screen"><LoaderCircle className="spin-loader" /><span>Checking operator sign-in…</span></main>;
   }
