@@ -92,10 +92,8 @@ function paint(
     );
     context.arc(center, center, focusOuterRadius, -HIGHLIGHT_HALF_ANGLE, HIGHLIGHT_HALF_ANGLE);
     context.closePath();
-    context.globalAlpha = 0.9;
     context.fillStyle = settings.background;
     context.fill();
-    context.globalAlpha = 1;
     context.shadowColor = "#ffe08a";
     context.shadowBlur = 9;
     context.strokeStyle = "#ffe08a";
