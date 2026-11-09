@@ -51,7 +51,7 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
 .wheel-halo { position: absolute; inset: 5%; border-radius: 50%; background: radial-gradient(circle, #c99d4d1e 0%, #c99d4d0b 57%, transparent 72%); filter: blur(7px); }
 .wheel-canvas { position: relative; z-index: 1; width: 100%; height: 100%; filter: drop-shadow(0 13px 22px #0009); }
 .wheel-center-logo { position: absolute; z-index: 2; top: 50%; left: 50%; width: 15%; aspect-ratio: 1; transform: translate(-50%, -50%); object-fit: contain; pointer-events: none; }
-.pointer { position: absolute; z-index: 2; top: 50%; right: 0; width: 38px; height: 54px; transform: translateY(-50%); clip-path: polygon(0 50%, 100% 0, 100% 100%); background: #251f19; filter: drop-shadow(0 2px 3px #000); }
+.pointer { position: absolute; z-index: 2; top: 50%; right: -25px; width: 38px; height: 54px; transform: translateY(-50%); clip-path: polygon(0 50%, 100% 0, 100% 100%); background: #251f19; filter: drop-shadow(0 2px 3px #000); }
 .pointer span { position: absolute; inset: 5px 0 5px 8px; clip-path: polygon(0 50%, 100% 0, 100% 100%); background: linear-gradient(90deg, #b47c34, #f1d593 52%, #b47c34); }
 .spin-controls { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 2px; }
 .spin-button { width: min(290px, 80%); height: 56px; display: flex; align-items: center; justify-content: center; gap: 11px; border: 1px solid #e4c782; border-radius: 7px; color: #211a12; background: linear-gradient(115deg, #e9c987, #bd8b45); box-shadow: 0 8px 26px #c59a4a24, inset 0 1px 0 #fff4cf; font-size: 13px; letter-spacing: .12em; font-weight: 800; transition: transform .18s, filter .18s; }
@@ -289,7 +289,7 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
   .topbar-actions .icon-button { width: 32px; min-height: 34px; }
   .hero-heading { padding: 25px 0 17px; }
   .game-layout { grid-template-columns: 1fr; gap: 16px; }
-  .wheel-stage { width: min(100%, 440px); }
+  .wheel-stage { width: min(calc(100% - 28px), 440px); }
   .spin-button { height: 50px; }
   .side-panel { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; }
   .draw-card { grid-row: span 2; }
@@ -309,7 +309,7 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
   .participant-file-actions .text-button { font-size: 9px; }
   .public-heading { padding: 23px 0 5px; }
   .public-content { grid-template-columns: 1fr; gap: 18px; }
-  .public-game .wheel-stage { width: min(58vh, 440px, 100%); }
+  .public-game .wheel-stage { width: min(58vh, 440px, calc(100% - 28px)); }
   .public-game > .spin-button { width: min(290px, 88%); }
   .public-details { grid-template-columns: 1fr 1fr; align-items: start; }
 }
@@ -326,7 +326,7 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
   .backup-actions .button { font-size: 9px; }
   .page-footer { flex-direction: column; align-items: center; }
   .public-shell { width: calc(100% - 24px); }
-  .public-game .wheel-stage { width: min(55vh, 100%); }
+  .public-game .wheel-stage { width: min(55vh, calc(100% - 28px)); }
   .public-latest { flex-wrap: wrap; justify-content: center; }
   .public-details { grid-template-columns: 1fr; }
   .public-top-actions { gap: 4px; }

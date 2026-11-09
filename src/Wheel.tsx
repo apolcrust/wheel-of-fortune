@@ -13,9 +13,16 @@ const HIGHLIGHT_HALF_ANGLE = 0.28;
 interface WheelProps {
   participants: Participant[];
   settings: WheelSettings;
+  stoppedWinner?: Participant | null;
 }
 
-function paint(canvas: HTMLCanvasElement, participants: Participant[], settings: WheelSettings, rotation: number) {
+function paint(
+  canvas: HTMLCanvasElement,
+  participants: Participant[],
+  settings: WheelSettings,
+  rotation: number,
+  stoppedWinner: Participant | null,
+) {
   const bounds = canvas.getBoundingClientRect();
   if (!bounds.width || !bounds.height) return;
   const ratio = window.devicePixelRatio || 1;
@@ -70,20 +77,20 @@ function paint(canvas: HTMLCanvasElement, participants: Participant[], settings:
     });
 
     const pointerIndex = segmentIndexAtPointer(rotation, participants.length, POINTER_ANGLE);
-    const focusInnerRadius = Math.max(15, size * 0.055) + 8;
-    const focusOuterRadius = radius - 7;
+    const hubRadius = Math.max(34, size * 0.11);
+    const focusInnerRadius = hubRadius + 5;
+    const focusOuterRadius = radius;
     context.save();
     context.beginPath();
     context.moveTo(
+      center + focusInnerRadius,
+      center,
+    );
+    context.lineTo(
       center + Math.cos(-HIGHLIGHT_HALF_ANGLE) * focusOuterRadius,
       center + Math.sin(-HIGHLIGHT_HALF_ANGLE) * focusOuterRadius,
     );
     context.arc(center, center, focusOuterRadius, -HIGHLIGHT_HALF_ANGLE, HIGHLIGHT_HALF_ANGLE);
-    context.lineTo(
-      center + Math.cos(HIGHLIGHT_HALF_ANGLE) * focusInnerRadius,
-      center + Math.sin(HIGHLIGHT_HALF_ANGLE) * focusInnerRadius,
-    );
-    context.arc(center, center, focusInnerRadius, HIGHLIGHT_HALF_ANGLE, -HIGHLIGHT_HALF_ANGLE, true);
     context.closePath();
     context.fillStyle = "rgba(255, 215, 112, 0.2)";
     context.fill();
@@ -94,9 +101,9 @@ function paint(canvas: HTMLCanvasElement, participants: Participant[], settings:
     context.stroke();
     context.restore();
 
-    const highlightedName = participants[pointerIndex].name.trim();
-    const labelFontSize = Math.max(9, Math.min(17, size * 0.033));
-    const labelMaxWidth = radius * 0.68;
+    const highlightedName = (stoppedWinner ?? participants[pointerIndex]).name.trim();
+    const labelFontSize = Math.max(10, Math.min(18, size * 0.034));
+    const labelMaxWidth = radius * 0.58;
     context.save();
     context.font = `700 ${labelFontSize}px Inter, sans-serif`;
     const words = highlightedName.split(/\s+/);
@@ -112,7 +119,7 @@ function paint(canvas: HTMLCanvasElement, participants: Participant[], settings:
       }
     }
     if (line) lines.push(line);
-    const visibleLines = lines.slice(0, 2).map((text) => {
+    const visibleLines = lines.slice(0, 3).map((text) => {
       let label = text;
       while (label.length > 1 && context.measureText(label).width > labelMaxWidth) {
         label = `${label.slice(0, -2)}…`;
@@ -127,23 +134,18 @@ function paint(canvas: HTMLCanvasElement, participants: Participant[], settings:
       visibleLines[visibleLines.length - 1] = `${lastLine}…`;
     }
     const lineHeight = labelFontSize * 1.15;
-    const labelHeight = lineHeight * visibleLines.length + labelFontSize * 0.5;
-    const labelWidth = labelMaxWidth + labelFontSize;
-    const labelX = center + radius * 0.57;
+    const labelX = center + radius * 0.6;
     const labelY = center;
-    context.fillStyle = "rgba(255, 220, 137, 0.96)";
-    context.strokeStyle = "#fff0bd";
-    context.lineWidth = 1;
-    context.shadowColor = "#000";
-    context.shadowBlur = 8;
-    context.fillRect(labelX - labelWidth / 2, labelY - labelHeight / 2, labelWidth, labelHeight);
-    context.shadowBlur = 0;
-    context.strokeRect(labelX - labelWidth / 2, labelY - labelHeight / 2, labelWidth, labelHeight);
     context.fillStyle = "#30200d";
+    context.strokeStyle = "#ffe6ac";
+    context.lineWidth = Math.max(2, size * 0.004);
+    context.shadowColor = "#fff0bd";
+    context.shadowBlur = 5;
     context.textAlign = "center";
     context.textBaseline = "middle";
     visibleLines.forEach((text, index) => {
       const y = labelY + (index - (visibleLines.length - 1) / 2) * lineHeight;
+      context.strokeText(text, labelX, y, labelMaxWidth);
       context.fillText(text, labelX, y, labelMaxWidth);
     });
     context.restore();
@@ -157,7 +159,7 @@ function paint(canvas: HTMLCanvasElement, participants: Participant[], settings:
   context.beginPath();
   const hubRadius = Math.max(34, size * 0.11);
   context.arc(center, center, hubRadius, 0, TAU);
-  context.fillStyle = settings.background;
+  context.fillStyle = "#111014";
   context.fill();
   context.strokeStyle = settings.borderColor;
   context.lineWidth = 3;
@@ -174,19 +176,19 @@ function paint(canvas: HTMLCanvasElement, participants: Participant[], settings:
   }
 }
 
-export const Wheel = forwardRef<WheelHandle, WheelProps>(function Wheel({ participants, settings }, ref) {
+export const Wheel = forwardRef<WheelHandle, WheelProps>(function Wheel({ participants, settings, stoppedWinner = null }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rotationRef = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const render = () => paint(canvas, participants, settings, rotationRef.current);
+    const render = () => paint(canvas, participants, settings, rotationRef.current, stoppedWinner);
     render();
     const observer = new ResizeObserver(render);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [participants, settings]);
+  }, [participants, settings, stoppedWinner]);
 
   useImperativeHandle(ref, () => ({
     get rotation() {
@@ -206,18 +208,18 @@ export const Wheel = forwardRef<WheelHandle, WheelProps>(function Wheel({ partic
           const progress = Math.min(1, (now - startedAt) / duration);
           const eased = 1 - (1 - progress) ** 4;
           rotationRef.current = start + distance * eased;
-          paint(canvas, participants, settings, rotationRef.current);
+          paint(canvas, participants, settings, rotationRef.current, stoppedWinner);
           if (progress < 1) requestAnimationFrame(frame);
           else {
             rotationRef.current = ((target % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-            paint(canvas, participants, settings, rotationRef.current);
+            paint(canvas, participants, settings, rotationRef.current, stoppedWinner);
             resolve();
           }
         };
         requestAnimationFrame(frame);
       });
     },
-  }), [participants, settings]);
+  }), [participants, settings, stoppedWinner]);
 
   return <>
     <canvas ref={canvasRef} className="wheel-canvas" aria-label="Prize wheel" />

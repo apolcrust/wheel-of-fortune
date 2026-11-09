@@ -43,6 +43,13 @@ function keyLabel(code: string) {
   return code.startsWith("Key") ? code.slice(3) : code.startsWith("Digit") ? code.slice(5) : code;
 }
 
+function winnerObservation(winner: Winner | undefined) {
+  return winner ? {
+    key: `${winner.spinNumber}:${winner.participant.id}:${winner.timestamp}`,
+    timestamp: winner.timestamp,
+  } : null;
+}
+
 function WinnerAnnouncement({ winner, confetti, autoRemove, onClose }: {
   winner: Winner;
   confetti: boolean;
@@ -87,6 +94,7 @@ function App() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
   const [lastWinner, setLastWinner] = useState<Winner | null>(null);
+  const [stoppedWinner, setStoppedWinner] = useState<Participant | null>(null);
   const [search, setSearch] = useState("");
   const [newName, setNewName] = useState("");
   const [importBook, setImportBook] = useState<XLSX.WorkBook | null>(null);
@@ -107,6 +115,7 @@ function App() {
   const tabId = useRef(crypto.randomUUID());
   const receivedDataRef = useRef<AppData | null>(null);
   const receivedBroadcastRef = useRef(false);
+  const latestWinnerObservationRef = useRef<ReturnType<typeof winnerObservation>>(null);
   const [operationPending, setOperationPending] = useState(false);
 
   const notify = useCallback((message: string, tone: Toast["tone"] = "success") => {
@@ -151,8 +160,17 @@ function App() {
       if (event.data.sender === tabId.current) return;
       if (event.data.type === "spin") {
         setRemoteBusy(event.data.busy);
+        if (event.data.busy) setStoppedWinner(null);
       } else {
         const receivedData = event.data.data;
+        const latestWinner = receivedData.winners[0];
+        const nextObservation = winnerObservation(latestWinner);
+        const previousObservation = latestWinnerObservationRef.current;
+        if (latestWinner && nextObservation?.key !== previousObservation?.key &&
+            (!previousObservation || Date.parse(latestWinner.timestamp) > Date.parse(previousObservation.timestamp))) {
+          setStoppedWinner(latestWinner.participant);
+        }
+        latestWinnerObservationRef.current = nextObservation;
         receivedBroadcastRef.current = true;
         receivedDataRef.current = receivedData;
         setData((current) => JSON.stringify(current) === JSON.stringify(receivedData) ? current : receivedData);
@@ -182,6 +200,7 @@ function App() {
           if (!row) throw new Error("This shared wheel event was not found or is no longer available.");
           const remoteData = validateData(row.data, "shared event");
           if (active) {
+            latestWinnerObservationRef.current = winnerObservation(remoteData.winners[0]);
             receivedDataRef.current = remoteData;
             setData(remoteData);
             setCustomPalette(remoteData.settings.colors.join(", "));
@@ -202,6 +221,7 @@ function App() {
     loadData().then((stored) => {
       if (active) {
         if (!receivedBroadcastRef.current) {
+          latestWinnerObservationRef.current = winnerObservation(stored.winners[0]);
           receivedDataRef.current = stored;
           setData(stored);
           setCustomPalette(stored.settings.colors.join(", "));
@@ -231,6 +251,16 @@ function App() {
         const row = payload.new as { owner_id: string; data: unknown; is_spinning: boolean };
         try {
           const remoteData = validateData(row.data, "shared event");
+          const latestWinner = remoteData.winners[0];
+          const nextObservation = winnerObservation(latestWinner);
+          const previousObservation = latestWinnerObservationRef.current;
+          if (row.is_spinning) {
+            setStoppedWinner(null);
+          } else if (latestWinner && nextObservation?.key !== previousObservation?.key &&
+              (!previousObservation || Date.parse(latestWinner.timestamp) > Date.parse(previousObservation.timestamp))) {
+            setStoppedWinner(latestWinner.participant);
+          }
+          latestWinnerObservationRef.current = nextObservation;
           receivedDataRef.current = remoteData;
           setData((current) => JSON.stringify(current) === JSON.stringify(remoteData) ? current : remoteData);
           setEventOwnerId(row.owner_id);
@@ -354,6 +384,7 @@ function App() {
       return;
     }
     setBusy(true);
+    setStoppedWinner(null);
     if (!supabase) channelRef.current?.postMessage({ sender: tabId.current, type: "spin", busy: true });
     setLastWinner(null);
     try {
@@ -402,6 +433,8 @@ function App() {
         receivedDataRef.current = completed;
         setData(completed);
         setLastWinner(completed.winners[0] ?? null);
+        setStoppedWinner(completed.winners[0]?.participant ?? null);
+        latestWinnerObservationRef.current = winnerObservation(completed.winners[0]);
         setRemoteBusy(false);
         if (completed.settings.sound) {
           try { playTone(660, 0.55, 0.85); }
@@ -415,6 +448,8 @@ function App() {
         timestamp: new Date().toISOString(),
         mode,
       };
+      setStoppedWinner(record.participant);
+      latestWinnerObservationRef.current = winnerObservation(record);
       setData((state) => ({
         ...state,
         participants: state.settings.autoRemove ? removeParticipantById(state.participants, selected.id) : state.participants,
@@ -766,7 +801,8 @@ function App() {
           <div className="wheel-stage">
             <div className="wheel-halo" />
             <div className="pointer" aria-hidden="true"><span /></div>
-            <Wheel ref={wheelRef} participants={data.participants} settings={data.settings} />
+            <Wheel ref={wheelRef} participants={data.participants} settings={data.settings}
+              stoppedWinner={busy || remoteBusy ? null : stoppedWinner} />
           </div>
           <button className="spin-button" disabled={spinLocked || data.participants.length === 0} onClick={() => void startSpin()}>
             {spinLocked ? <><LoaderCircle className="button-spinner" size={19} /> SPINNING</> : <><Sparkles size={18} /> SPIN THE WHEEL</>}
@@ -929,7 +965,8 @@ function App() {
           <div className="wheel-stage">
             <div className="wheel-halo" />
             <div className="pointer" aria-hidden="true"><span /></div>
-            <Wheel ref={wheelRef} participants={data.participants} settings={data.settings} />
+            <Wheel ref={wheelRef} participants={data.participants} settings={data.settings}
+              stoppedWinner={busy || remoteBusy ? null : stoppedWinner} />
           </div>
           <div className="spin-controls">
             <button className="spin-button" disabled={spinLocked || data.participants.length === 0}>

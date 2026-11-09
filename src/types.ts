@@ -44,7 +44,7 @@ export const DEFAULT_SETTINGS: WheelSettings = {
   confetti: true,
   shortcut: "KeyO",
   colors: ["#bd8e39", "#28242b", "#8d382e", "#35303a", "#c79b50", "#493238", "#7d5b35", "#322c34"],
-  background: "#151318",
+  background: "#111014",
   textColor: "#fff8e9",
   borderColor: "#e5c27c",
 };
