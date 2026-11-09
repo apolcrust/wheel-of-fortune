@@ -8,7 +8,7 @@ export interface WheelHandle {
 }
 
 const TAU = Math.PI * 2;
-const HIGHLIGHT_HALF_ANGLE = 0.7;
+const HIGHLIGHT_HALF_ANGLE = 1.25;
 const HIGHLIGHT_COUNT = 5;
 
 interface WheelProps {
@@ -93,7 +93,9 @@ function paint(
         start,
         end,
         color: settings.colors[pointerIndex % settings.colors.length] ?? "#8d382e",
-        name: (offset === 0 && stoppedWinner ? stoppedWinner : participants[pointerIndex]).name.trim(),
+        name: (index === Math.floor(HIGHLIGHT_COUNT / 2) && stoppedWinner
+          ? stoppedWinner
+          : participants[pointerIndex]).name.trim(),
       };
     });
 
@@ -144,16 +146,26 @@ function paint(
     context.restore();
 
     for (const highlight of highlights) {
-      const fontSize = Math.max(7, Math.min(13, size * 0.03));
-      const lineHeight = fontSize * 1.05;
+      const fontSize = Math.max(8, Math.min(16, size * 0.028));
+      const lineHeight = fontSize * 1.08;
+      context.save();
+      context.beginPath();
+      context.moveTo(center + focusInnerRadius, center);
+      context.lineTo(
+        center + Math.cos(highlight.start) * radius,
+        center + Math.sin(highlight.start) * radius,
+      );
+      context.arc(center, center, radius, highlight.start, highlight.end);
+      context.closePath();
+      context.clip();
       context.save();
       context.translate(
-        center + Math.cos(highlight.offset) * radius * 0.77,
-        center + Math.sin(highlight.offset) * radius * 0.77,
+        center + Math.cos(highlight.offset) * radius * 0.75,
+        center + Math.sin(highlight.offset) * radius * 0.75,
       );
       context.rotate(highlight.offset);
       const highlightedName = highlight.name;
-      const maxWidth = radius * 0.58;
+      const maxWidth = radius * 0.35;
       context.font = `700 ${fontSize}px Inter, sans-serif`;
       const lines: string[] = [];
       let line = "";
@@ -181,7 +193,7 @@ function paint(
         }
       }
       if (line) lines.push(line);
-      const maxLines = Math.max(1, Math.min(3, Math.floor((radius * 0.77 * highlightSlice * 0.84) / lineHeight)));
+      const maxLines = Math.max(1, Math.min(5, Math.floor((radius * 0.75 * highlightSlice * 0.96) / lineHeight)));
       const visibleLines = lines.slice(0, maxLines).map((text) => {
         let fitted = text;
         while (fitted.length > 1 && context.measureText(fitted).width > maxWidth) {
@@ -202,8 +214,14 @@ function paint(
       context.textAlign = "center";
       context.textBaseline = "middle";
       visibleLines.forEach((text, index) => {
-        context.fillText(text, 0, (index - (visibleLines.length - 1) / 2) * lineHeight, maxWidth);
+        const y = (index - (visibleLines.length - 1) / 2) * lineHeight;
+        context.lineJoin = "round";
+        context.strokeStyle = "#251b13";
+        context.lineWidth = Math.max(2, fontSize * 0.18);
+        context.strokeText(text, 0, y, maxWidth);
+        context.fillText(text, 0, y, maxWidth);
       });
+      context.restore();
       context.restore();
     }
   }
