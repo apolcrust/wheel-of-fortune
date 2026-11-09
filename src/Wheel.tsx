@@ -1,10 +1,13 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { Participant, WheelSettings } from "./types";
+import { POINTER_ANGLE } from "./engine";
 
 export interface WheelHandle {
   spinTo: (rotation: number, duration: number) => Promise<void>;
   readonly rotation: number;
 }
+
+const TAU = Math.PI * 2;
 
 interface WheelProps {
   participants: Participant[];
@@ -72,12 +75,57 @@ function paint(canvas: HTMLCanvasElement, participants: Participant[], settings:
   context.lineWidth = 5;
   context.stroke();
   context.beginPath();
-  context.arc(center, center, Math.max(15, size * 0.055), 0, Math.PI * 2);
+  const hubRadius = participants.length > 0 ? Math.max(34, size * 0.11) : Math.max(15, size * 0.055);
+  context.arc(center, center, hubRadius, 0, TAU);
   context.fillStyle = settings.background;
   context.fill();
   context.strokeStyle = settings.borderColor;
   context.lineWidth = 3;
   context.stroke();
+  if (participants.length > 0) {
+    const pointerOffset = ((POINTER_ANGLE + Math.PI / 2 - rotation) % TAU + TAU) % TAU;
+    const selected = participants[Math.floor(pointerOffset / slice)];
+    if (selected) {
+      const maxWidth = hubRadius * 1.65;
+      const fontSize = Math.max(8, Math.min(13, size * 0.027));
+      context.fillStyle = settings.textColor;
+      context.font = `700 ${fontSize}px Inter, sans-serif`;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      const words = selected.name.trim().split(/\s+/);
+      const lines: string[] = [];
+      let line = "";
+      for (const word of words) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && context.measureText(next).width > maxWidth) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = next;
+        }
+      }
+      if (line) lines.push(line);
+      const visibleLines = lines.slice(0, 2).map((text) => {
+        let label = text;
+        while (label.length > 1 && context.measureText(label).width > maxWidth) {
+          label = `${label.slice(0, -2)}…`;
+        }
+        return label;
+      });
+      if (lines.length > visibleLines.length && visibleLines.length > 0) {
+        let lastLine = visibleLines[visibleLines.length - 1];
+        while (lastLine.length > 1 && context.measureText(`${lastLine}…`).width > maxWidth) {
+          lastLine = `${lastLine.slice(0, -2)}…`;
+        }
+        visibleLines[visibleLines.length - 1] = `${lastLine}…`;
+      }
+      const lineHeight = fontSize * 1.15;
+      visibleLines.forEach((text, index) => {
+        const y = center + (index - (visibleLines.length - 1) / 2) * lineHeight;
+        context.fillText(text, center, y, maxWidth);
+      });
+    }
+  }
   if (participants.length === 0) {
     context.textAlign = "center";
     context.textBaseline = "middle";

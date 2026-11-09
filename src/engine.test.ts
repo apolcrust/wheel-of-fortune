@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consumeOverride, removeParticipantById, targetRotation, weightedIndexForRoll } from "./engine";
+import { consumeOverride, POINTER_ANGLE, removeParticipantById, targetRotation, weightedIndexForRoll } from "./engine";
 import type { Participant } from "./types";
 
 const participants: Participant[] = [
@@ -30,6 +30,16 @@ describe("wheel alignment", () => {
     const slice = (Math.PI * 2) / count;
     const segmentStart = index * slice;
     const segmentCenter = segmentStart + slice / 2;
+    const error = Math.abs(((pointerPosition - segmentCenter + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+    expect(error).toBeLessThan(1e-10);
+  });
+
+  it.each([1, 2, 17, 100])("stops the requested segment under the right-side pointer for %i entries", (count) => {
+    const index = count - 1;
+    const rotation = targetRotation(2.3, index, count, 5, POINTER_ANGLE);
+    const pointerPosition = ((POINTER_ANGLE - (-Math.PI / 2 + rotation)) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    const slice = (Math.PI * 2) / count;
+    const segmentCenter = index * slice + slice / 2;
     const error = Math.abs(((pointerPosition - segmentCenter + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
     expect(error).toBeLessThan(1e-10);
   });

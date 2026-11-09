@@ -1,6 +1,7 @@
 import type { Participant } from "./types";
 
 const TAU = Math.PI * 2;
+export const POINTER_ANGLE = 0;
 
 export function secureRandomInt(maxExclusive: number): number {
   if (!Number.isSafeInteger(maxExclusive) || maxExclusive < 1) {
@@ -62,10 +63,16 @@ export function consumeOverride(overrideId: string | null, selectedId: string): 
   return overrideId === selectedId ? null : overrideId;
 }
 
-export function targetRotation(current: number, index: number, count: number, rotations: number): number {
+export function targetRotation(
+  current: number,
+  index: number,
+  count: number,
+  rotations: number,
+  pointerAngle = -Math.PI / 2,
+): number {
   if (count < 1 || index < 0 || index >= count) throw new RangeError("The selected wheel segment is invalid.");
   const slice = TAU / count;
-  const desired = ((-((index + 0.5) * slice) % TAU) + TAU) % TAU;
+  const desired = ((pointerAngle + Math.PI / 2 - (index + 0.5) * slice) % TAU + TAU) % TAU;
   const remainder = ((current % TAU) + TAU) % TAU;
   const alignment = (desired - remainder + TAU) % TAU;
   return current + Math.max(1, rotations) * TAU + alignment;

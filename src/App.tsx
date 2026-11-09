@@ -6,7 +6,7 @@ import {
   ListPlus, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, Settings2, ShieldCheck,
   Sparkles, Trash2, Trophy, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
-import { pickRandomIndex, removeParticipantById, targetRotation } from "./engine";
+import { pickRandomIndex, removeParticipantById, targetRotation, POINTER_ANGLE } from "./engine";
 import { loadData, saveData, validateData } from "./storage";
 import type { AppData, Participant, WheelSettings, Winner } from "./types";
 import { DEFAULT_DATA, DEFAULT_SETTINGS } from "./types";
@@ -385,7 +385,13 @@ function App() {
         catch (error) { notify(error instanceof Error ? error.message : "Spin sound could not be played.", "error"); }
       }
       const start = wheelRef.current?.rotation ?? 0;
-      await wheelRef.current?.spinTo(targetRotation(start, index, data.participants.length, data.settings.rotations), data.settings.duration * 1000);
+      await wheelRef.current?.spinTo(targetRotation(
+        start,
+        index,
+        data.participants.length,
+        data.settings.rotations,
+        POINTER_ANGLE,
+      ), data.settings.duration * 1000);
       if (supabase && eventId && spinId) {
         const { data: completedData, error } = await supabase.rpc("finish_wheel_spin", {
           p_event_id: eventId,

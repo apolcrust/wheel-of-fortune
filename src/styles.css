@@ -50,8 +50,8 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
 .wheel-stage { width: min(100%, 590px); aspect-ratio: 1; position: relative; display: grid; place-items: center; }
 .wheel-halo { position: absolute; inset: 5%; border-radius: 50%; background: radial-gradient(circle, #c99d4d1e 0%, #c99d4d0b 57%, transparent 72%); filter: blur(7px); }
 .wheel-canvas { position: relative; z-index: 1; width: 100%; height: 100%; filter: drop-shadow(0 13px 22px #0009); }
-.pointer { position: absolute; z-index: 2; top: 0; left: 50%; width: 34px; height: 54px; transform: translateX(-50%); clip-path: polygon(0 0, 100% 0, 50% 100%); background: #251f19; filter: drop-shadow(0 2px 3px #000); }
-.pointer span { position: absolute; inset: 0 5px 8px; clip-path: polygon(0 0, 100% 0, 50% 100%); background: linear-gradient(90deg, #b47c34, #f1d593 52%, #b47c34); }
+.pointer { position: absolute; z-index: 2; top: 50%; right: 0; width: 38px; height: 54px; transform: translateY(-50%); clip-path: polygon(0 50%, 100% 0, 100% 100%); background: #251f19; filter: drop-shadow(0 2px 3px #000); }
+.pointer span { position: absolute; inset: 5px 0 5px 8px; clip-path: polygon(0 50%, 100% 0, 100% 100%); background: linear-gradient(90deg, #b47c34, #f1d593 52%, #b47c34); }
 .spin-controls { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 2px; }
 .spin-button { width: min(290px, 80%); height: 56px; display: flex; align-items: center; justify-content: center; gap: 11px; border: 1px solid #e4c782; border-radius: 7px; color: #211a12; background: linear-gradient(115deg, #e9c987, #bd8b45); box-shadow: 0 8px 26px #c59a4a24, inset 0 1px 0 #fff4cf; font-size: 13px; letter-spacing: .12em; font-weight: 800; transition: transform .18s, filter .18s; }
 .spin-button:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.08); }
@@ -235,7 +235,7 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
 .public-heading p { margin: 0; color: #aaa3a6; font-size: 13px; }
 .public-content { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 310px; align-items: center; gap: 28px; padding: 8px 0 20px; }
 .public-game { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.public-game .wheel-stage { width: min(66vh, 590px, 100%); }
+.public-game .wheel-stage { width: min(66vh, 620px, 100%); }
 .public-game > .spin-button { flex: 0 0 auto; margin-top: 3px; }
 .public-game > .spin-caption { margin-top: 10px; }
 .public-stats { display: flex; align-items: center; gap: 16px; margin-top: 18px; color: #968e94; font-size: 11px; }
