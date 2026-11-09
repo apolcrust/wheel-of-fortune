@@ -19,6 +19,8 @@ import type { Session } from "@supabase/supabase-js";
 type Dialog = "participants" | "import" | "settings" | "history" | null;
 type Toast = { id: number; message: string; tone: "success" | "error" };
 
+const SPIN_DURATION_SECONDS = 5;
+
 function makeParticipant(name: string, weight = 1): Participant {
   return { id: crypto.randomUUID(), name: name.trim(), weight };
 }
@@ -451,7 +453,7 @@ function App() {
         data.participants.length,
         data.settings.rotations,
         POINTER_ANGLE,
-      ), data.settings.duration * 1000);
+      ), SPIN_DURATION_SECONDS * 1000);
       if (supabase && eventId && spinId) {
         const { data: completedData, error } = await supabase.rpc("finish_wheel_spin", {
           p_event_id: eventId,
@@ -1293,8 +1295,7 @@ function App() {
             <fieldset className="settings-fields" disabled={spinLocked}>
             <label className="setting-field"><span>Event title</span><input maxLength={60} value={data.settings.title} onChange={(event) => updateSettings({ title: event.target.value })} /></label>
             <div className="settings-grid">
-              <label className="setting-field"><span>Spin duration (seconds)</span><input type="number" min="1" max="30" value={data.settings.duration}
-                onChange={(event) => updateSettings({ duration: Math.min(30, Math.max(1, Number(event.target.value) || 1)) })} /></label>
+              <label className="setting-field"><span>Spin duration</span><input type="text" value={`${SPIN_DURATION_SECONDS} seconds`} readOnly /></label>
               <label className="setting-field"><span>Full rotations</span><input type="number" min="1" max="20" value={data.settings.rotations}
                 onChange={(event) => updateSettings({ rotations: Math.min(20, Math.max(1, Number(event.target.value) || 1)) })} /></label>
             </div>

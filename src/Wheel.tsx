@@ -12,12 +12,6 @@ const TAU = Math.PI * 2;
 const HIGHLIGHT_HALF_ANGLE = Math.PI / 2;
 const HIGHLIGHT_COUNT = 3;
 
-const HIGHLIGHT_COLORS = [
-  ["#fff45a", "#ffc21c", "#e98206"],
-  ["#ffe643", "#f7a30b", "#d56b03"],
-  ["#ffdf35", "#f29a08", "#c85e02"],
-] as const;
-
 interface WheelProps {
   participants: Participant[];
   settings: WheelSettings;
@@ -60,7 +54,7 @@ function paint(
     context.fillStyle = settings.background;
     context.fill();
   } else {
-    participants.forEach((participant, index) => {
+    participants.forEach((_, index) => {
       const start = -Math.PI / 2 + rotation + index * slice;
       const end = start + slice;
 
@@ -77,29 +71,6 @@ function paint(
       context.lineWidth = Math.max(0.7, size / 550);
       context.stroke();
 
-      if (size * slice < 13) return;
-
-      context.save();
-      context.translate(center, center);
-      context.rotate(start + slice / 2);
-      context.textAlign = "right";
-      context.textBaseline = "middle";
-      context.fillStyle = settings.textColor;
-
-      const available = Math.max(5, Math.min(17, size * slice * 0.32));
-      context.font = `700 ${available}px Inter, sans-serif`;
-
-      let label = participant.name.trim();
-
-      while (
-        label.length > 3 &&
-        context.measureText(label).width > radius * 0.78
-      ) {
-        label = `${label.slice(0, -2)}…`;
-      }
-
-      context.fillText(label, radius * 0.83, 0, radius * 0.78);
-      context.restore();
     });
 
     const hubRadius = Math.max(34, size * 0.11);
@@ -120,21 +91,15 @@ function paint(
         );
 
         return {
-          index,
           offset,
           pointerIndex,
           start,
           end,
-          name: (
-            index === Math.floor(HIGHLIGHT_COUNT / 2) && stoppedWinner
-              ? stoppedWinner
-              : participants[pointerIndex]
-          ).name.trim(),
         };
       },
     );
 
-    // Draw the three connected golden sections.
+    // Draw the three highlighted sections in their normal slot colors.
     context.save();
 
     for (const highlight of highlights) {
@@ -156,26 +121,12 @@ function paint(
 
       context.closePath();
 
-      const gradient = context.createRadialGradient(
-        center,
-        center,
-        focusInnerRadius,
-        center,
-        center,
-        radius,
-      );
-
-      const colors = HIGHLIGHT_COLORS[highlight.index];
-
-      gradient.addColorStop(0, colors[0]);
-      gradient.addColorStop(0.58, colors[1]);
-      gradient.addColorStop(1, colors[2]);
-
-      context.fillStyle = gradient;
-      context.shadowColor = "#8d4300";
-      context.shadowBlur = Math.max(8, size * 0.025);
+      context.fillStyle =
+        settings.colors[highlight.pointerIndex % settings.colors.length] ?? "#8d382e";
+      context.shadowColor = "#e9aa31";
+      context.shadowBlur = Math.max(9, size * 0.028);
       context.shadowOffsetX = 0;
-      context.shadowOffsetY = Math.max(2, size * 0.006);
+      context.shadowOffsetY = Math.max(3, size * 0.008);
 
       context.fill();
     }
@@ -203,150 +154,76 @@ function paint(
 
       context.closePath();
 
-      context.shadowColor = "#ffb000";
-      context.shadowBlur = Math.max(8, size * 0.03);
+      context.shadowColor = "#f3b93c";
+      context.shadowBlur = Math.max(8, size * 0.026);
       context.strokeStyle = "#ffd83e";
-      context.lineWidth = Math.max(3, size * 0.008);
+      context.lineWidth = Math.max(3, size * 0.007);
       context.stroke();
 
       context.shadowBlur = 0;
       context.strokeStyle = "#fff4a0";
-      context.lineWidth = Math.max(1, size * 0.0025);
+      context.lineWidth = Math.max(1, size * 0.0022);
       context.stroke();
     }
 
     context.restore();
 
-    // Draw names inside the three highlighted sections.
-    for (const highlight of highlights) {
-      const fontSize = Math.max(11, Math.min(21, size * 0.035));
-      const lineHeight = fontSize * 1.15;
+    // Draw labels on top so they rotate with their underlying wheel slots.
+    participants.forEach((participant, index) => {
+      const start = -Math.PI / 2 + rotation + index * slice;
+      if (size * slice < 13) return;
 
+      context.save();
+      context.translate(center, center);
+      context.rotate(start + slice / 2);
+      context.textAlign = "right";
+      context.textBaseline = "middle";
+      context.fillStyle = settings.textColor;
+
+      const available = Math.max(5, Math.min(17, size * slice * 0.32));
+      context.font = `700 ${available}px Inter, sans-serif`;
+
+      let label = participant.name.trim();
+
+      while (
+        label.length > 3 &&
+        context.measureText(label).width > radius * 0.78
+      ) {
+        label = `${label.slice(0, -2)}…`;
+      }
+
+      context.fillText(label, radius * 0.83, 0, radius * 0.78);
+      context.restore();
+    });
+
+    if (stoppedWinner) {
+      const middleHighlight = highlights[Math.floor(HIGHLIGHT_COUNT / 2)];
+      const fontSize = Math.max(11, Math.min(20, size * 0.034));
       context.save();
       context.beginPath();
       context.moveTo(center + focusInnerRadius, center);
-
       context.lineTo(
-        center + Math.cos(highlight.start) * radius,
-        center + Math.sin(highlight.start) * radius,
+        center + Math.cos(middleHighlight.start) * radius,
+        center + Math.sin(middleHighlight.start) * radius,
       );
-
-      context.arc(
-        center,
-        center,
-        radius,
-        highlight.start,
-        highlight.end,
-      );
-
+      context.arc(center, center, radius, middleHighlight.start, middleHighlight.end);
       context.closePath();
       context.clip();
-
-      context.save();
-
       context.translate(
-        center + Math.cos(highlight.offset) * radius * 0.70,
-        center + Math.sin(highlight.offset) * radius * 0.70,
+        center + Math.cos(middleHighlight.offset) * radius * 0.7,
+        center + Math.sin(middleHighlight.offset) * radius * 0.7,
       );
-
-      context.rotate(highlight.offset);
-
-      const highlightedName = highlight.name;
-      const maxWidth = radius * 0.48;
-
+      context.rotate(middleHighlight.offset);
       context.font = `700 ${fontSize}px Inter, sans-serif`;
-
-      const lines: string[] = [];
-      let line = "";
-
-      const words = highlightedName.split(/\s+/).flatMap((word) => {
-        const chunks: string[] = [];
-        let chunk = "";
-
-        for (const character of word) {
-          if (
-            chunk &&
-            context.measureText(chunk + character).width > maxWidth
-          ) {
-            chunks.push(chunk);
-            chunk = character;
-          } else {
-            chunk += character;
-          }
-        }
-
-        if (chunk) chunks.push(chunk);
-        return chunks;
-      });
-
-      for (const word of words) {
-        const next = line ? `${line} ${word}` : word;
-
-        if (line && context.measureText(next).width > maxWidth) {
-          lines.push(line);
-          line = word;
-        } else {
-          line = next;
-        }
-      }
-
-      if (line) lines.push(line);
-
-      const maxLines = Math.max(
-        1,
-        Math.min(
-          5,
-          Math.floor(
-            (radius * 0.70 * highlightSlice * 0.95) / lineHeight,
-          ),
-        ),
-      );
-
-      const visibleLines = lines.slice(0, maxLines).map((text) => {
-        let fitted = text;
-
-        while (
-          fitted.length > 1 &&
-          context.measureText(fitted).width > maxWidth
-        ) {
-          fitted = `${fitted.slice(0, -1)}…`;
-        }
-
-        return fitted;
-      });
-
-      if (lines.length > visibleLines.length && visibleLines.length > 0) {
-        let last = visibleLines[visibleLines.length - 1];
-
-        while (
-          last.length > 1 &&
-          context.measureText(`${last}…`).width > maxWidth
-        ) {
-          last = last.slice(0, -1);
-        }
-
-        visibleLines[visibleLines.length - 1] = `${last}…`;
-      }
-
-      context.fillStyle = "#fffdf2";
-      context.shadowColor = "#1a0b00";
-      context.shadowBlur = 4;
       context.textAlign = "center";
       context.textBaseline = "middle";
-
-      visibleLines.forEach((text, index) => {
-        const y =
-          (index - (visibleLines.length - 1) / 2) * lineHeight;
-
-        context.lineJoin = "round";
-        context.strokeStyle = "#3b1a00";
-        context.lineWidth = Math.max(2, fontSize * 0.16);
-
-        context.strokeText(text, 0, y, maxWidth);
-        context.fillText(text, 0, y, maxWidth);
-      });
-
-      context.restore();
+      context.fillStyle = "#fffdf2";
+      context.strokeStyle = "#3b1a00";
+      context.lineWidth = Math.max(2, fontSize * 0.16);
+      context.shadowColor = "#1a0b00";
+      context.shadowBlur = 4;
+      context.strokeText(stoppedWinner.name, 0, 0, radius * 0.48);
+      context.fillText(stoppedWinner.name, 0, 0, radius * 0.48);
       context.restore();
     }
   }
@@ -443,6 +320,12 @@ function paint(
 
   context.strokeStyle = settings.borderColor;
   context.lineWidth = 3;
+  context.stroke();
+
+  context.beginPath();
+  context.arc(center, center, hubRadius * 0.86, 0, TAU);
+  context.strokeStyle = "#e5c27c";
+  context.lineWidth = Math.max(1, size * 0.002);
   context.stroke();
 
   if (participants.length === 0) {

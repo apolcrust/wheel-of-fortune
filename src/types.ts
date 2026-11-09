@@ -37,7 +37,7 @@ export interface AppData {
 
 export const DEFAULT_SETTINGS: WheelSettings = {
   title: "THE GRAND DRAW",
-  duration: 7,
+  duration: 5,
   rotations: 6,
   autoRemove: true,
   sound: true,
