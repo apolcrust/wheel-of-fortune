@@ -226,8 +226,16 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
 .winner-icon { width: 62px; height: 62px; display: grid; place-items: center; margin-bottom: 20px; border: 1px solid #b39252; border-radius: 50%; color: #f0d18a; background: #503c20; box-shadow: 0 0 28px #d4ad6a32; }
 .winner-modal h2 { margin: 9px 0 5px; color: #f1debb; font: 600 27px "Playfair Display", Georgia, serif; }
 .winner-name { max-width: 100%; overflow-wrap: anywhere; margin: 9px 0 17px; color: white; font: 600 clamp(27px, 6vw, 40px)/1.12 "Playfair Display", Georgia, serif; }
-.winner-removed { margin: 14px 0 0; color: #a69b98; font-size: 10px; }
-.winner-continue { min-width: 165px; margin-top: 20px; }
+.winner-removal-note { margin: 0 0 5px; color: #b7aca5; font-size: 12px; }
+.winner-actions { width: 100%; display: flex; flex-direction: column; gap: 9px; margin-top: 18px; }
+.winner-remove, .winner-continue { width: 100%; min-height: 42px; }
+.winner-remove { border-color: #9c6655; color: #f0c0ab; }
+.winner-remove:hover:not(:disabled) { background: #8d382e35; }
+.winner-removal-setting { display: flex; align-items: flex-start; gap: 11px; padding: 12px; border: 1px solid #ffffff12; border-radius: 9px; color: #c7b9aa; background: #ffffff05; }
+.winner-removal-setting > svg { flex: 0 0 auto; margin-top: 2px; color: #d3a75d; }
+.winner-removal-setting span { display: flex; flex-direction: column; gap: 4px; }
+.winner-removal-setting strong { color: #eee2d1; font-size: 12px; }
+.winner-removal-setting small { color: #aaa0a0; font-size: 11px; line-height: 1.5; }
 .confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .confetti i { position: absolute; top: -12px; width: 7px; height: 12px; animation-name: fall; animation-timing-function: linear; animation-iteration-count: infinite; }
 @keyframes fall { to { transform: translateY(110vh) rotate(680deg); } }

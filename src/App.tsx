@@ -6,7 +6,7 @@ import {
   ListPlus, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, Settings2, ShieldCheck,
   Sparkles, Trash2, Trophy, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
-import { pickRandomIndex, removeParticipantById, targetRotation, POINTER_ANGLE } from "./engine";
+import { pickRandomIndex, targetRotation, POINTER_ANGLE } from "./engine";
 import { loadData, saveData, validateData } from "./storage";
 import type { AppData, Participant, WheelSettings, Winner } from "./types";
 import { DEFAULT_DATA, DEFAULT_SETTINGS } from "./types";
@@ -53,12 +53,23 @@ function winnerObservation(winner: Winner | undefined) {
   } : null;
 }
 
-function WinnerAnnouncement({ winner, confetti, autoRemove, onClose }: {
+function WinnerAnnouncement({ winner, confetti, onRemove, onClose }: {
   winner: Winner;
   confetti: boolean;
-  autoRemove: boolean;
+  onRemove: () => Promise<boolean>;
   onClose: () => void;
 }) {
+  const [removing, setRemoving] = useState(false);
+
+  const removeWinner = async () => {
+    setRemoving(true);
+    try {
+      if (await onRemove()) onClose();
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   return <div className="modal-backdrop winner-backdrop" role="presentation" onMouseDown={(event) => {
     if (event.target === event.currentTarget) onClose();
   }}>
@@ -71,8 +82,13 @@ function WinnerAnnouncement({ winner, confetti, autoRemove, onClose }: {
       <div className="winner-icon"><Trophy size={28} /></div><div className="eyebrow">THE WHEEL HAS SPOKEN</div>
       <h2 id="winner-heading">Congratulations!</h2><p className="winner-name">{winner.participant.name}</p>
 
-      {autoRemove && <p className="winner-removed"> Has been removed from the wheel</p>}
-      <button className="button button-primary winner-continue" onClick={onClose}><Check size={16} /> Continue</button>
+      <p className="winner-removal-note">The winner will stay on the wheel unless you remove them.</p>
+      <div className="winner-actions">
+        <button className="button button-outline winner-remove" disabled={removing} onClick={() => void removeWinner()}>
+          <Trash2 size={15} />{removing ? "Removing…" : "Remove winner from wheel"}
+        </button>
+        <button className="button button-primary winner-continue" onClick={onClose}><Check size={16} /> Continue</button>
+      </div>
     </section>
   </div>;
 }
@@ -483,7 +499,6 @@ function App() {
       latestWinnerObservationRef.current = winnerObservation(record);
       setData((state) => ({
         ...state,
-        participants: state.settings.autoRemove ? removeParticipantById(state.participants, selected.id) : state.participants,
         winners: [record, ...state.winners],
         overrideParticipantId: mode === "controlled" ? null : state.overrideParticipantId,
         overrideActivated: mode === "controlled" ? false : state.overrideActivated,
@@ -548,14 +563,15 @@ function App() {
   };
 
   const removeParticipant = async (id: string) => {
-    if (spinLocked) return;
+    if (spinLocked) return false;
     if (!isOperator && supabase && eventId) {
       try {
         await updateSharedParticipants("remove", id);
+        return true;
       } catch (error) {
         notify(error instanceof Error ? error.message : "The participant could not be removed.", "error");
+        return false;
       }
-      return;
     }
     setData((current) => ({
       ...current,
@@ -563,6 +579,16 @@ function App() {
       overrideParticipantId: current.overrideParticipantId === id ? null : current.overrideParticipantId,
       overrideActivated: current.overrideParticipantId === id ? false : current.overrideActivated,
     }));
+    return true;
+  };
+
+  const removeAnnouncedWinner = async (id: string) => {
+    const removed = await removeParticipant(id);
+    if (removed) {
+      setStoppedWinner(null);
+      notify("Winner removed from the active wheel.");
+    }
+    return removed;
   };
 
   const removeDuplicateParticipantsFromList = async () => {
@@ -987,7 +1013,7 @@ function App() {
       </section>
       <footer className="public-footer">YOUR EVENT. YOUR MOMENT.</footer>
       {lastWinner && <WinnerAnnouncement winner={lastWinner} confetti={data.settings.confetti}
-        autoRemove={data.settings.autoRemove} onClose={() => setLastWinner(null)} />}
+        onRemove={() => removeAnnouncedWinner(lastWinner.participant.id)} onClose={() => setLastWinner(null)} />}
       {dialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
         <section className={`dialog ${dialog === "participants" || dialog === "history" ? "dialog-wide" : ""}`} role="dialog" aria-modal="true">
           <header className="dialog-header"><div><span className="eyebrow">FORTUNE / WHEEL</span>
@@ -1218,7 +1244,7 @@ function App() {
       <footer className="page-footer"><span>YOUR EVENT. YOUR MOMENT.</span><span>Session saved locally on this device <span className="saved-dot" /></span></footer>
 
       {lastWinner && <WinnerAnnouncement winner={lastWinner} confetti={data.settings.confetti}
-        autoRemove={data.settings.autoRemove} onClose={() => setLastWinner(null)} />}
+        onRemove={() => removeAnnouncedWinner(lastWinner.participant.id)} onClose={() => setLastWinner(null)} />}
 
       {dialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
         <section className={`dialog ${dialog === "participants" || dialog === "history" ? "dialog-wide" : ""}`} role="dialog" aria-modal="true">
@@ -1311,7 +1337,7 @@ function App() {
               <label><span>Segment text</span><input aria-label="Segment text color" type="color" value={data.settings.textColor} onChange={(event) => updateSettings({ textColor: event.target.value })} /></label>
               <label><span>Segment borders</span><input aria-label="Segment border color" type="color" value={data.settings.borderColor} onChange={(event) => updateSettings({ borderColor: event.target.value })} /></label>
             </div>
-            <label className="check-setting"><input type="checkbox" checked={data.settings.autoRemove} onChange={(event) => updateSettings({ autoRemove: event.target.checked })} /><span>Remove each winner from the active wheel</span></label>
+            <div className="winner-removal-setting"><Trash2 size={15} /><span><strong>Winner removal</strong><small>Winners stay on the wheel until you remove them from the announcement.</small></span></div>
             <label className="check-setting"><input type="checkbox" checked={data.settings.sound} onChange={(event) => updateSettings({ sound: event.target.checked })} /><span>Enable spin and winner sounds</span></label>
             <label className="check-setting"><input type="checkbox" checked={data.settings.confetti} onChange={(event) => updateSettings({ confetti: event.target.checked })} /><span>Celebrate winners with confetti</span></label>
             <div className="shortcut-setting"><div><strong>Desktop shortcut (optional)</strong><span>You can also activate a one-time pick with the button on the draw controls.</span></div>

@@ -3,6 +3,23 @@ import type { Participant } from "./types";
 const TAU = Math.PI * 2;
 export const POINTER_ANGLE = 0;
 
+export function wheelSpinProgress(progress: number): number {
+  const clampedProgress = Math.min(1, Math.max(0, progress));
+  const decelerationStart = 0.6;
+  const decelerationDuration = 1 - decelerationStart;
+  const totalDistance = decelerationStart + decelerationDuration / 2;
+
+  if (clampedProgress <= decelerationStart) {
+    return clampedProgress / totalDistance;
+  }
+
+  const decelerationProgress = (clampedProgress - decelerationStart) / decelerationDuration;
+  const decelerationDistance = decelerationDuration * (
+    decelerationProgress / 2 + Math.sin(Math.PI * decelerationProgress) / (2 * Math.PI)
+  );
+  return (decelerationStart + decelerationDistance) / totalDistance;
+}
+
 export function secureRandomInt(maxExclusive: number): number {
   if (!Number.isSafeInteger(maxExclusive) || maxExclusive < 1) {
     throw new RangeError("The participant count must be a positive safe integer.");

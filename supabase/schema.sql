@@ -137,7 +137,6 @@ as $$
 declare
   v_event public.wheel_events%rowtype;
   v_data jsonb;
-  v_participants jsonb;
   v_winners jsonb;
   v_record jsonb;
 begin
@@ -158,14 +157,6 @@ begin
     'timestamp', now(),
     'mode', v_event.pending_mode
   );
-
-  if coalesce((v_data #>> '{settings,autoRemove}')::boolean, true) then
-    select coalesce(jsonb_agg(p.value order by p.ordinality), '[]'::jsonb)
-    into v_participants
-    from jsonb_array_elements(v_data -> 'participants') with ordinality as p(value, ordinality)
-    where p.value ->> 'id' <> v_event.pending_winner ->> 'id';
-    v_data := jsonb_set(v_data, '{participants}', v_participants, true);
-  end if;
 
   v_winners := jsonb_build_array(v_record) || coalesce(v_data -> 'winners', '[]'::jsonb);
   v_data := jsonb_set(v_data, '{winners}', v_winners, true);

@@ -92,7 +92,7 @@ export function validateData(value: unknown, source: DataSource = "backup file")
       !["background", "textColor", "borderColor"].every((key) =>
         typeof settings[key as keyof typeof settings] === "string" &&
         /^#[0-9a-f]{6}$/i.test(settings[key as keyof typeof settings] as string)) ||
-      !["autoRemove", "sound", "confetti"].every((key) =>
+      !["sound", "confetti"].every((key) =>
         typeof settings[key as keyof typeof settings] === "boolean")) {
     throw new Error(`${sourceLabel} contains invalid wheel settings.`);
   }

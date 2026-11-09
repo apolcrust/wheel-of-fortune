@@ -1,7 +1,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { Participant, WheelSettings } from "./types";
-import { POINTER_ANGLE, segmentIndexAtPointer } from "./engine";
+import { POINTER_ANGLE, segmentIndexAtPointer, wheelSpinProgress } from "./engine";
 
 export interface WheelHandle {
   spinTo: (rotation: number, duration: number) => Promise<void>;
@@ -177,12 +177,12 @@ function paint(
     for (const highlight of highlights) {
       const fontSize = Math.max(10, Math.min(20, size * 0.03));
       const lineHeight = fontSize * 1.12;
-      const labelRadius = radius * 0.67;
+      const labelRadius = radius * 0.57;
       const maxWidth = Math.max(
         fontSize * 2,
         Math.min(
           radius * 0.48,
-          2 * labelRadius * Math.sin(highlightSlice / 2) * 0.84,
+          2 * labelRadius * Math.sin(highlightSlice / 2) * 0.76,
         ),
       );
       context.save();
@@ -472,7 +472,7 @@ export const Wheel = forwardRef<WheelHandle, WheelProps>(
                 (now - startedAt) / duration,
               );
 
-              const eased = 1 - (1 - progress) ** 4;
+              const eased = wheelSpinProgress(progress);
 
               rotationRef.current = start + distance * eased;
 

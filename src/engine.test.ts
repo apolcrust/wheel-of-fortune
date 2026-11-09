@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consumeOverride, POINTER_ANGLE, removeParticipantById, segmentIndexAtPointer, targetRotation, weightedIndexForRoll } from "./engine";
+import { consumeOverride, POINTER_ANGLE, removeParticipantById, segmentIndexAtPointer, targetRotation, weightedIndexForRoll, wheelSpinProgress } from "./engine";
 import type { Participant } from "./types";
 
 const participants: Participant[] = [
@@ -23,6 +23,15 @@ describe("weighted selection", () => {
 });
 
 describe("wheel alignment", () => {
+  it("holds speed until the final part of the spin, then decelerates smoothly", () => {
+    expect(wheelSpinProgress(0)).toBe(0);
+    expect(wheelSpinProgress(0.6)).toBeCloseTo(0.75);
+    expect(wheelSpinProgress(0.8)).toBeGreaterThan(0.9);
+    expect(wheelSpinProgress(1)).toBe(1);
+    expect(wheelSpinProgress(-1)).toBe(0);
+    expect(wheelSpinProgress(2)).toBe(1);
+  });
+
   it.each([1, 2, 17, 100])("stops at the center of the requested segment for %i entries", (count) => {
     const index = count - 1;
     const rotation = targetRotation(2.3, index, count, 5, -Math.PI / 2);
