@@ -8,8 +8,15 @@ export interface WheelHandle {
 }
 
 const TAU = Math.PI * 2;
-const HIGHLIGHT_HALF_ANGLE = 1.25;
-const HIGHLIGHT_COUNT = 5;
+const HIGHLIGHT_HALF_ANGLE = 0.9;
+const HIGHLIGHT_COUNT = 3;
+const HIGHLIGHT_COLORS = [
+  ["#fff45a", "#ffc21c", "#e98206"],
+  ["#ffe643", "#f7a30b", "#d56b03"],
+  ["#ffdf35", "#f29a08", "#c85e02"],
+  ["#fff052", "#ffae0c", "#dc7003"],
+  ["#ffe743", "#f39208", "#ca5c02"],
+] as const;
 
 interface WheelProps {
   participants: Participant[];
@@ -40,7 +47,7 @@ function paint(
   const center = size / 2;
   const radius = center - 31;
   const rimRadius = center - 13;
-  const slice = participants.length > 0 ? (Math.PI * 2) / participants.length : Math.PI * 2;
+  const slice = participants.length > 0 ? TAU / participants.length : TAU;
 
   if (participants.length === 0) {
     context.beginPath();
@@ -79,7 +86,7 @@ function paint(
     });
 
     const hubRadius = Math.max(34, size * 0.11);
-    const focusInnerRadius = hubRadius + 5;
+    const focusInnerRadius = hubRadius + 2;
     const highlightSlice = (HIGHLIGHT_HALF_ANGLE * 2) / HIGHLIGHT_COUNT;
     const highlights = Array.from({ length: HIGHLIGHT_COUNT }, (_, index) => {
       const start = -HIGHLIGHT_HALF_ANGLE + index * highlightSlice;
@@ -92,7 +99,6 @@ function paint(
         pointerIndex,
         start,
         end,
-        color: settings.colors[pointerIndex % settings.colors.length] ?? "#8d382e",
         name: (index === Math.floor(HIGHLIGHT_COUNT / 2) && stoppedWinner
           ? stoppedWinner
           : participants[pointerIndex]).name.trim(),
@@ -109,45 +115,51 @@ function paint(
       );
       context.arc(center, center, radius, highlight.start, highlight.end);
       context.closePath();
-      context.fillStyle = highlight.color;
+      const gradient = context.createRadialGradient(
+        center,
+        center,
+        focusInnerRadius,
+        center,
+        center,
+        radius,
+      );
+      const colors = HIGHLIGHT_COLORS[highlight.index];
+      gradient.addColorStop(0, colors[0]);
+      gradient.addColorStop(0.58, colors[1]);
+      gradient.addColorStop(1, colors[2]);
+      context.fillStyle = gradient;
+      context.shadowColor = "#8d4300";
+      context.shadowBlur = Math.max(8, size * 0.025);
+      context.shadowOffsetX = 0;
+      context.shadowOffsetY = Math.max(2, size * 0.006);
       context.fill();
     }
-
-    const fanStart = highlights[0].start;
-    const fanEnd = highlights[highlights.length - 1].end;
-    context.beginPath();
-    context.moveTo(center + focusInnerRadius, center);
-    context.lineTo(center + Math.cos(fanStart) * radius, center + Math.sin(fanStart) * radius);
-    context.arc(center, center, radius, fanStart, fanEnd);
-    context.closePath();
-    context.shadowColor = "#000";
-    context.shadowBlur = Math.max(7, size * 0.03);
-    context.shadowOffsetY = Math.max(2, size * 0.008);
-    context.strokeStyle = "#ffe08a";
-    context.lineWidth = Math.max(2, size * 0.007);
-    context.stroke();
     context.shadowBlur = 0;
     context.shadowOffsetY = 0;
-    context.strokeStyle = "#fff4d2";
-    context.lineWidth = Math.max(0.8, size * 0.002);
-    context.stroke();
-
-    context.beginPath();
-    for (const highlight of highlights.slice(1)) {
+    for (const highlight of highlights) {
+      context.beginPath();
       context.moveTo(center + focusInnerRadius, center);
       context.lineTo(
         center + Math.cos(highlight.start) * radius,
         center + Math.sin(highlight.start) * radius,
       );
+      context.arc(center, center, radius, highlight.start, highlight.end);
+      context.closePath();
+      context.shadowColor = "#ffb000";
+      context.shadowBlur = Math.max(8, size * 0.03);
+      context.strokeStyle = "#ffd83e";
+      context.lineWidth = Math.max(3, size * 0.008);
+      context.stroke();
+      context.shadowBlur = 0;
+      context.strokeStyle = "#fff4a0";
+      context.lineWidth = Math.max(1, size * 0.0025);
+      context.stroke();
     }
-    context.strokeStyle = "#f4d796";
-    context.lineWidth = Math.max(0.7, size * 0.002);
-    context.stroke();
     context.restore();
 
     for (const highlight of highlights) {
-      const fontSize = Math.max(8, Math.min(16, size * 0.028));
-      const lineHeight = fontSize * 1.08;
+      const fontSize = Math.max(10, Math.min(22, size * 0.032));
+      const lineHeight = fontSize * 1.12;
       context.save();
       context.beginPath();
       context.moveTo(center + focusInnerRadius, center);
@@ -160,12 +172,12 @@ function paint(
       context.clip();
       context.save();
       context.translate(
-        center + Math.cos(highlight.offset) * radius * 0.75,
-        center + Math.sin(highlight.offset) * radius * 0.75,
+        center + Math.cos(highlight.offset) * radius * 0.74,
+        center + Math.sin(highlight.offset) * radius * 0.74,
       );
       context.rotate(highlight.offset);
       const highlightedName = highlight.name;
-      const maxWidth = radius * 0.35;
+      const maxWidth = radius * 0.31;
       context.font = `700 ${fontSize}px Inter, sans-serif`;
       const lines: string[] = [];
       let line = "";
@@ -193,7 +205,7 @@ function paint(
         }
       }
       if (line) lines.push(line);
-      const maxLines = Math.max(1, Math.min(5, Math.floor((radius * 0.75 * highlightSlice * 0.96) / lineHeight)));
+      const maxLines = Math.max(1, Math.min(5, Math.floor((radius * 0.74 * highlightSlice * 0.9) / lineHeight)));
       const visibleLines = lines.slice(0, maxLines).map((text) => {
         let fitted = text;
         while (fitted.length > 1 && context.measureText(fitted).width > maxWidth) {
@@ -208,16 +220,16 @@ function paint(
         }
         visibleLines[visibleLines.length - 1] = `${last}…`;
       }
-      context.fillStyle = "#fff1c8";
-      context.shadowColor = "#17100a";
-      context.shadowBlur = 3;
+      context.fillStyle = "#fffdf2";
+      context.shadowColor = "#1a0b00";
+      context.shadowBlur = 4;
       context.textAlign = "center";
       context.textBaseline = "middle";
       visibleLines.forEach((text, index) => {
         const y = (index - (visibleLines.length - 1) / 2) * lineHeight;
         context.lineJoin = "round";
-        context.strokeStyle = "#251b13";
-        context.lineWidth = Math.max(2, fontSize * 0.18);
+        context.strokeStyle = "#3b1a00";
+        context.lineWidth = Math.max(2, fontSize * 0.16);
         context.strokeText(text, 0, y, maxWidth);
         context.fillText(text, 0, y, maxWidth);
       });
