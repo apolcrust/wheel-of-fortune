@@ -92,21 +92,37 @@ function paint(
     );
     context.arc(center, center, focusOuterRadius, -HIGHLIGHT_HALF_ANGLE, HIGHLIGHT_HALF_ANGLE);
     context.closePath();
-    context.fillStyle = "rgba(255, 215, 112, 0.2)";
+    context.globalAlpha = 0.9;
+    context.fillStyle = settings.background;
     context.fill();
+    context.globalAlpha = 1;
     context.shadowColor = "#ffe08a";
-    context.shadowBlur = 16;
+    context.shadowBlur = 9;
     context.strokeStyle = "#ffe08a";
-    context.lineWidth = Math.max(3, size * 0.009);
+    context.lineWidth = Math.max(2, size * 0.006);
     context.stroke();
     context.restore();
 
     const highlightedName = (stoppedWinner ?? participants[pointerIndex]).name.trim();
-    const labelFontSize = Math.max(10, Math.min(18, size * 0.034));
-    const labelMaxWidth = radius * 0.58;
+    const labelFontSize = Math.max(10, Math.min(16, size * 0.036));
+    const labelMaxWidth = radius * 0.38;
+    const labelX = center + radius * 0.69;
     context.save();
     context.font = `700 ${labelFontSize}px Inter, sans-serif`;
-    const words = highlightedName.split(/\s+/);
+    const words = highlightedName.split(/\s+/).flatMap((word) => {
+      const chunks: string[] = [];
+      let chunk = "";
+      for (const character of word) {
+        if (chunk && context.measureText(chunk + character).width > labelMaxWidth) {
+          chunks.push(chunk);
+          chunk = character;
+        } else {
+          chunk += character;
+        }
+      }
+      if (chunk) chunks.push(chunk);
+      return chunks;
+    });
     const lines: string[] = [];
     let line = "";
     for (const word of words) {
@@ -119,33 +135,26 @@ function paint(
       }
     }
     if (line) lines.push(line);
-    const visibleLines = lines.slice(0, 3).map((text) => {
-      let label = text;
-      while (label.length > 1 && context.measureText(label).width > labelMaxWidth) {
-        label = `${label.slice(0, -2)}…`;
-      }
-      return label;
-    });
+    const lineHeight = labelFontSize * 1.15;
+    const focusTopToBottom = 2 * Math.tan(HIGHLIGHT_HALF_ANGLE) *
+      (labelX - center - focusInnerRadius);
+    const maxLines = Math.max(2, Math.min(3, Math.floor(focusTopToBottom * 0.6 / lineHeight)));
+    const visibleLines = lines.slice(0, maxLines);
     if (lines.length > visibleLines.length && visibleLines.length > 0) {
       let lastLine = visibleLines[visibleLines.length - 1];
       while (lastLine.length > 1 && context.measureText(`${lastLine}…`).width > labelMaxWidth) {
-        lastLine = `${lastLine.slice(0, -2)}…`;
+        lastLine = lastLine.slice(0, -1);
       }
       visibleLines[visibleLines.length - 1] = `${lastLine}…`;
     }
-    const lineHeight = labelFontSize * 1.15;
-    const labelX = center + radius * 0.6;
     const labelY = center;
-    context.fillStyle = "#30200d";
-    context.strokeStyle = "#ffe6ac";
-    context.lineWidth = Math.max(2, size * 0.004);
-    context.shadowColor = "#fff0bd";
-    context.shadowBlur = 5;
+    context.fillStyle = "#f4d18c";
+    context.shadowColor = "#111014";
+    context.shadowBlur = 3;
     context.textAlign = "center";
     context.textBaseline = "middle";
     visibleLines.forEach((text, index) => {
       const y = labelY + (index - (visibleLines.length - 1) / 2) * lineHeight;
-      context.strokeText(text, labelX, y, labelMaxWidth);
       context.fillText(text, labelX, y, labelMaxWidth);
     });
     context.restore();
