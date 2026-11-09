@@ -4,11 +4,11 @@ import { validateData } from "./storage";
 
 describe("validateData", () => {
   it("reports which data source contains invalid session data", () => {
-    expect(() => validateData(null)).toThrow("The backup file does not contain valid session data.");
+    expect(() => validateData(null)).toThrow("The backup file has no session data (stored value: null).");
     expect(() => validateData(null, "saved browser session"))
-      .toThrow("The saved browser session does not contain valid session data.");
+      .toThrow("The saved browser session has no session data (stored value: null).");
     expect(() => validateData(null, "shared event"))
-      .toThrow("The shared event does not contain valid session data.");
+      .toThrow("The shared event has no session data (stored value: null).");
   });
 
   it("accepts valid session data from any source", () => {

@@ -37,7 +37,8 @@ function paint(
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.clearRect(0, 0, size, size);
   const center = size / 2;
-  const radius = center - 13;
+  const radius = center - 31;
+  const rimRadius = center - 13;
   const slice = participants.length > 0 ? (Math.PI * 2) / participants.length : Math.PI * 2;
 
   if (participants.length === 0) {
@@ -92,12 +93,21 @@ function paint(
     );
     context.arc(center, center, focusOuterRadius, -HIGHLIGHT_HALF_ANGLE, HIGHLIGHT_HALF_ANGLE);
     context.closePath();
+    context.shadowColor = "#000";
+    context.shadowBlur = Math.max(8, size * 0.035);
+    context.shadowOffsetX = 0;
+    context.shadowOffsetY = Math.max(2, size * 0.009);
     context.fillStyle = settings.colors[pointerIndex % settings.colors.length] ?? "#8d382e";
     context.fill();
     context.shadowColor = "#ffe08a";
-    context.shadowBlur = 9;
+    context.shadowBlur = Math.max(12, size * 0.035);
+    context.shadowOffsetY = 0;
     context.strokeStyle = "#ffe08a";
-    context.lineWidth = Math.max(2, size * 0.006);
+    context.lineWidth = Math.max(3, size * 0.009);
+    context.stroke();
+    context.shadowBlur = 0;
+    context.strokeStyle = "#fff4d2";
+    context.lineWidth = Math.max(1, size * 0.0025);
     context.stroke();
     context.restore();
 
@@ -157,6 +167,60 @@ function paint(
     });
     context.restore();
   }
+
+  context.save();
+  context.beginPath();
+  context.arc(center, center, rimRadius, 0, TAU);
+  context.arc(center, center, radius, 0, TAU, true);
+  context.closePath();
+  const rimGradient = context.createRadialGradient(center, center, radius, center, center, rimRadius);
+  rimGradient.addColorStop(0, "#e5c27c");
+  rimGradient.addColorStop(0.13, "#6e4a25");
+  rimGradient.addColorStop(0.48, "#241b19");
+  rimGradient.addColorStop(0.78, "#4d2e1b");
+  rimGradient.addColorStop(1, "#e5c27c");
+  context.fillStyle = rimGradient;
+  context.shadowColor = "#000";
+  context.shadowBlur = Math.max(8, size * 0.025);
+  context.fill();
+  context.shadowBlur = 0;
+  context.beginPath();
+  context.arc(center, center, rimRadius, 0, TAU);
+  context.strokeStyle = "#f0d27f";
+  context.lineWidth = Math.max(2, size * 0.006);
+  context.stroke();
+  context.beginPath();
+  context.arc(center, center, radius + 1, 0, TAU);
+  context.strokeStyle = "#f3d996";
+  context.lineWidth = Math.max(1.5, size * 0.004);
+  context.stroke();
+
+  const markerCount = 32;
+  const markerRing = (radius + rimRadius) / 2;
+  const markerRadius = Math.max(2, size * 0.008);
+  for (let index = 0; index < markerCount; index += 1) {
+    const angle = (index / markerCount) * TAU;
+    const x = center + Math.cos(angle) * markerRing;
+    const y = center + Math.sin(angle) * markerRing;
+    context.beginPath();
+    context.arc(x, y, markerRadius, 0, TAU);
+    const markerGradient = context.createRadialGradient(
+      x - markerRadius * 0.3,
+      y - markerRadius * 0.35,
+      markerRadius * 0.1,
+      x,
+      y,
+      markerRadius,
+    );
+    markerGradient.addColorStop(0, "#fff5c3");
+    markerGradient.addColorStop(0.48, "#edc75d");
+    markerGradient.addColorStop(1, "#a95d19");
+    context.fillStyle = markerGradient;
+    context.shadowColor = "#f5c85f";
+    context.shadowBlur = markerRadius * 1.8;
+    context.fill();
+  }
+  context.restore();
 
   context.beginPath();
   context.arc(center, center, radius, 0, Math.PI * 2);

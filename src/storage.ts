@@ -55,7 +55,13 @@ export function validateData(value: unknown, source: DataSource = "backup file")
       throw new Error(`${sourceLabel} contains malformed JSON session data.`);
     }
   }
-  if (!value || typeof value !== "object") throw new Error(`${sourceLabel} does not contain valid session data.`);
+  if (!value || typeof value !== "object") {
+    const storedValue = value === null ? "null" : typeof value;
+    throw new Error(
+      `${sourceLabel} has no session data (stored value: ${storedValue}). ` +
+      "The event may be incomplete. Restore its data from a backup or create a new shared event.",
+    );
+  }
   const candidate = value as Partial<AppData>;
   if (!Array.isArray(candidate.participants) || !Array.isArray(candidate.winners)) {
     throw new Error(`${sourceLabel} must include participant and winner lists.`);
