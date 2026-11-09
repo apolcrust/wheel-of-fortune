@@ -9,7 +9,7 @@ export interface WheelHandle {
 
 const TAU = Math.PI * 2;
 const HIGHLIGHT_OFFSETS = [-0.6, -0.3, 0, 0.3, 0.6];
-const HIGHLIGHT_HALF_ANGLE = 0.135;
+const HIGHLIGHT_HALF_ANGLE = 0.15;
 
 interface WheelProps {
   participants: Participant[];

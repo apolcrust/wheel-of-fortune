@@ -98,6 +98,8 @@ function App() {
   const [search, setSearch] = useState("");
   const [newName, setNewName] = useState("");
   const [importBook, setImportBook] = useState<XLSX.WorkBook | null>(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importPreviewOnly, setImportPreviewOnly] = useState(false);
   const [sheetRows, setSheetRows] = useState<Record<string, unknown[][]>>({});
   const [sheetName, setSheetName] = useState("");
   const [columnIndex, setColumnIndex] = useState(0);
@@ -105,6 +107,7 @@ function App() {
   const [importAction, setImportAction] = useState<"append" | "replace">("append");
   const [keepDuplicates, setKeepDuplicates] = useState(true);
   const backupInput = useRef<HTMLInputElement>(null);
+  const audienceExcelInput = useRef<HTMLInputElement>(null);
   const [capturingShortcut, setCapturingShortcut] = useState(false);
   const [customPalette, setCustomPalette] = useState("");
   const [overrideSearch, setOverrideSearch] = useState("");
@@ -510,7 +513,7 @@ function App() {
     }));
   };
 
-  const loadWorkbook = async (file: File) => {
+  const loadWorkbook = async (file: File, previewOnly = false) => {
     try {
       const XLSX = await import("xlsx");
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
@@ -520,6 +523,8 @@ function App() {
         XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], { header: 1, defval: "", raw: false }) as unknown[][],
       ]));
       setImportBook(workbook);
+      setImportFileName(file.name);
+      setImportPreviewOnly(previewOnly);
       setSheetRows(rows);
       setSheetName(workbook.SheetNames[0]);
       setColumnIndex(0);
@@ -553,8 +558,26 @@ function App() {
     return { columns, names, empty: dataRows.length - nonEmptyRows.length, missing: nonEmptyRows.length - names.length, duplicates };
   }, [sheetRows, sheetName, columnIndex, hasHeader]);
 
+  const importComparison = useMemo(() => {
+    const workbookNames = new Set(importRows.names.map((name) => name.trim().toLocaleLowerCase()));
+    const eventNames = new Set(data.participants.map((participant) => participant.name.trim().toLocaleLowerCase()));
+    const matching = [...workbookNames].filter((name) => eventNames.has(name)).length;
+    return {
+      matching,
+      workbookOnly: [...workbookNames].filter((name) => !eventNames.has(name)).length,
+      eventOnly: [...eventNames].filter((name) => !workbookNames.has(name)).length,
+    };
+  }, [data.participants, importRows.names]);
+
   const confirmImport = () => {
     if (spinLocked) return;
+    if (importPreviewOnly) {
+      setDialog(null);
+      setImportBook(null);
+      setImportFileName("");
+      setImportPreviewOnly(false);
+      return;
+    }
     let names = importRows.names;
     if (!keepDuplicates) {
       const seen = new Set(importAction === "append"
@@ -578,6 +601,7 @@ function App() {
     notify(`Imported ${incoming.length} participant${incoming.length === 1 ? "" : "s"}${skipped ? `; skipped ${skipped} duplicate name${skipped === 1 ? "" : "s"}` : ""}.`);
     setDialog(null);
     setImportBook(null);
+    setImportFileName("");
   };
 
   const updateParticipant = (id: string, changes: Partial<Participant>) => {
@@ -845,7 +869,19 @@ function App() {
                 <span className="participant-color" style={{ background: data.settings.colors[index % data.settings.colors.length] }} />
                 <span>{person.name}</span><small>{person.weight > 1 ? `×${person.weight}` : ""}</small>
               </li>)}</ul>}
-            {!supabase && <button className="button button-quiet public-detail-action" disabled={spinLocked} onClick={() => setDialog("participants")}><ListPlus size={15} /> Manage participants</button>}
+            <div className="public-participant-actions">
+              <label className={`button button-quiet file-button public-detail-action${spinLocked ? " is-disabled" : ""}`}>
+                <FileSpreadsheet size={15} /> Verify Excel list
+                <input ref={audienceExcelInput} type="file" accept=".xlsx,.xls,.csv" disabled={spinLocked}
+                  aria-label="Verify participant list using an Excel file"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void loadWorkbook(file, true);
+                    event.target.value = "";
+                  }} />
+              </label>
+              {!supabase && <button className="button button-quiet public-detail-action" disabled={spinLocked} onClick={() => setDialog("participants")}><ListPlus size={15} /> Manage participants</button>}
+            </div>
           </section>
           <section className="public-detail-card">
             <div className="public-card-heading"><div><span className="card-overline">DRAW RECORD</span><h2>Winner history</h2></div>
@@ -865,7 +901,7 @@ function App() {
       {dialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
         <section className={`dialog ${dialog === "participants" || dialog === "history" ? "dialog-wide" : ""}`} role="dialog" aria-modal="true">
           <header className="dialog-header"><div><span className="eyebrow">FORTUNE / WHEEL</span>
-            <h2>{dialog === "participants" ? "Participants" : dialog === "import" ? "Import spreadsheet" : dialog === "settings" ? "Wheel settings" : "Winner history"}</h2></div>
+            <h2>{dialog === "participants" ? "Participants" : dialog === "import" ? (importPreviewOnly ? "Verify participant list" : "Import spreadsheet") : dialog === "settings" ? "Wheel settings" : "Winner history"}</h2></div>
             <button className="icon-button" aria-label="Close dialog" onClick={() => setDialog(null)}><X size={18} /></button>
           </header>
           {dialog === "participants" && <div className="dialog-content">
@@ -897,23 +933,33 @@ function App() {
           </div>}
           {dialog === "import" && <div className="dialog-content">
             {!importBook ? <div className="empty-state"><Upload size={22} /><p>Select an XLSX, XLS, or CSV file to begin.</p></div> : <>
-              <div className="file-summary"><FileSpreadsheet size={19} /><strong>{importBook.Props?.Title || "Spreadsheet loaded"}</strong><span>{importBook.SheetNames.length} sheet{importBook.SheetNames.length === 1 ? "" : "s"}</span></div>
+              <div className="file-summary"><FileSpreadsheet size={19} /><strong>{importFileName || importBook.Props?.Title || "Spreadsheet loaded"}</strong><span>{importBook.SheetNames.length} sheet{importBook.SheetNames.length === 1 ? "" : "s"}</span></div>
               {importBook.SheetNames.length > 1 && <label className="setting-field"><span>Worksheet</span><select value={sheetName} onChange={(event) => { setSheetName(event.target.value); setColumnIndex(0); }}>
                 {importBook.SheetNames.map((name) => <option key={name}>{name}</option>)}</select></label>}
               <label className="setting-field"><span>Name column</span><select value={columnIndex} onChange={(event) => setColumnIndex(Number(event.target.value))}>
                 {(importRows.columns.length ? importRows.columns : ["No columns found"]).map((label, index) => <option key={`${label}-${index}`} value={index}>{label}</option>)}</select></label>
               <label className="check-setting"><input type="checkbox" checked={hasHeader} onChange={(event) => setHasHeader(event.target.checked)} /><span>First row contains column headers</span></label>
-              <label className="check-setting"><input type="checkbox" checked={keepDuplicates} onChange={(event) => setKeepDuplicates(event.target.checked)} /><span>Keep duplicate names as separate entries</span></label>
+              {!importPreviewOnly && <label className="check-setting"><input type="checkbox" checked={keepDuplicates} onChange={(event) => setKeepDuplicates(event.target.checked)} /><span>Keep duplicate names as separate entries</span></label>}
               <div className="import-preview"><div className="preview-heading"><span>PREVIEW</span><strong>{importRows.names.length} names · {importRows.empty} blank rows · {importRows.missing} rows without a name</strong></div>
                 {importRows.names.length === 0 ? <p>No names found in the selected column.</p> : <div className="preview-names">{importRows.names.slice(0, 12).map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}{importRows.names.length > 12 && <span>+{importRows.names.length - 12} more</span>}</div>}
                 {importRows.duplicates > 0 && <p className="duplicate-note">{importRows.duplicates} repeated name{importRows.duplicates === 1 ? "" : "s"} detected. {keepDuplicates ? "They will be kept as separate participants." : "Repeated names will be skipped."}</p>}
               </div>
-              <fieldset className="import-choice"><legend>Import action</legend>
-                <label><input type="radio" name="audience-import-action" checked={importAction === "append"} onChange={() => setImportAction("append")} /> Add to current participants</label>
-                <label><input type="radio" name="audience-import-action" checked={importAction === "replace"} onChange={() => setImportAction("replace")} /> Replace current participants</label>
-              </fieldset>
-              <div className="dialog-actions"><button className="button button-outline" onClick={() => setDialog(null)}>Cancel</button>
-                <button className="button button-primary" onClick={confirmImport} disabled={spinLocked || !importRows.names.length}><Upload size={15} /> Import {importRows.names.length} names</button></div>
+              {importPreviewOnly ? <>
+                <p className="audience-import-note">Read-only verification: this file will not change the live participant list or affect the draw.</p>
+                <div className="audience-import-comparison">
+                  <span><strong>{importComparison.matching}</strong> names match the live list</span>
+                  <span><strong>{importComparison.workbookOnly}</strong> only in this file</span>
+                  <span><strong>{importComparison.eventOnly}</strong> only in the live list</span>
+                </div>
+                <div className="dialog-actions"><button className="button button-primary" onClick={confirmImport}>Done</button></div>
+              </> : <>
+                <fieldset className="import-choice"><legend>Import action</legend>
+                  <label><input type="radio" name="audience-import-action" checked={importAction === "append"} onChange={() => setImportAction("append")} /> Add to current participants</label>
+                  <label><input type="radio" name="audience-import-action" checked={importAction === "replace"} onChange={() => setImportAction("replace")} /> Replace current participants</label>
+                </fieldset>
+                <div className="dialog-actions"><button className="button button-outline" onClick={() => setDialog(null)}>Cancel</button>
+                  <button className="button button-primary" onClick={confirmImport} disabled={spinLocked || !importRows.names.length}><Upload size={15} /> Import {importRows.names.length} names</button></div>
+              </>}
             </>}
           </div>}
           {dialog === "settings" && <div className="dialog-content settings-content">
