@@ -68,7 +68,7 @@ export function targetRotation(
   index: number,
   count: number,
   rotations: number,
-  pointerAngle = -Math.PI / 2,
+  pointerAngle = POINTER_ANGLE,
 ): number {
   if (count < 1 || index < 0 || index >= count) throw new RangeError("The selected wheel segment is invalid.");
   const slice = TAU / count;
@@ -76,4 +76,18 @@ export function targetRotation(
   const remainder = ((current % TAU) + TAU) % TAU;
   const alignment = (desired - remainder + TAU) % TAU;
   return current + Math.max(1, rotations) * TAU + alignment;
+}
+
+export function segmentIndexAtPointer(
+  rotation: number,
+  count: number,
+  pointerAngle = POINTER_ANGLE,
+): number {
+  if (!Number.isInteger(count) || count < 1) throw new RangeError("The wheel must have at least one segment.");
+  if (!Number.isFinite(rotation) || !Number.isFinite(pointerAngle)) {
+    throw new RangeError("The wheel rotation and pointer angle must be finite.");
+  }
+  const slice = TAU / count;
+  const offset = ((pointerAngle + Math.PI / 2 - rotation) % TAU + TAU) % TAU;
+  return Math.min(count - 1, Math.floor(offset / slice));
 }

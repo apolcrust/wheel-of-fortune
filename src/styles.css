@@ -50,6 +50,7 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
 .wheel-stage { width: min(100%, 590px); aspect-ratio: 1; position: relative; display: grid; place-items: center; }
 .wheel-halo { position: absolute; inset: 5%; border-radius: 50%; background: radial-gradient(circle, #c99d4d1e 0%, #c99d4d0b 57%, transparent 72%); filter: blur(7px); }
 .wheel-canvas { position: relative; z-index: 1; width: 100%; height: 100%; filter: drop-shadow(0 13px 22px #0009); }
+.wheel-center-logo { position: absolute; z-index: 2; top: 50%; left: 50%; width: 15%; aspect-ratio: 1; transform: translate(-50%, -50%); object-fit: contain; pointer-events: none; }
 .pointer { position: absolute; z-index: 2; top: 50%; right: 0; width: 38px; height: 54px; transform: translateY(-50%); clip-path: polygon(0 50%, 100% 0, 100% 100%); background: #251f19; filter: drop-shadow(0 2px 3px #000); }
 .pointer span { position: absolute; inset: 5px 0 5px 8px; clip-path: polygon(0 50%, 100% 0, 100% 100%); background: linear-gradient(90deg, #b47c34, #f1d593 52%, #b47c34); }
 .spin-controls { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 2px; }

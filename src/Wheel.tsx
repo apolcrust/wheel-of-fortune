@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { Participant, WheelSettings } from "./types";
-import { POINTER_ANGLE } from "./engine";
+import { POINTER_ANGLE, segmentIndexAtPointer } from "./engine";
 
 export interface WheelHandle {
   spinTo: (rotation: number, duration: number) => Promise<void>;
@@ -8,6 +8,7 @@ export interface WheelHandle {
 }
 
 const TAU = Math.PI * 2;
+const HIGHLIGHT_HALF_ANGLE = 0.28;
 
 interface WheelProps {
   participants: Participant[];
@@ -67,6 +68,85 @@ function paint(canvas: HTMLCanvasElement, participants: Participant[], settings:
       context.fillText(label, radius * 0.83, 0, radius * 0.78);
       context.restore();
     });
+
+    const pointerIndex = segmentIndexAtPointer(rotation, participants.length, POINTER_ANGLE);
+    const focusInnerRadius = Math.max(15, size * 0.055) + 8;
+    const focusOuterRadius = radius - 7;
+    context.save();
+    context.beginPath();
+    context.moveTo(
+      center + Math.cos(-HIGHLIGHT_HALF_ANGLE) * focusOuterRadius,
+      center + Math.sin(-HIGHLIGHT_HALF_ANGLE) * focusOuterRadius,
+    );
+    context.arc(center, center, focusOuterRadius, -HIGHLIGHT_HALF_ANGLE, HIGHLIGHT_HALF_ANGLE);
+    context.lineTo(
+      center + Math.cos(HIGHLIGHT_HALF_ANGLE) * focusInnerRadius,
+      center + Math.sin(HIGHLIGHT_HALF_ANGLE) * focusInnerRadius,
+    );
+    context.arc(center, center, focusInnerRadius, HIGHLIGHT_HALF_ANGLE, -HIGHLIGHT_HALF_ANGLE, true);
+    context.closePath();
+    context.fillStyle = "rgba(255, 215, 112, 0.2)";
+    context.fill();
+    context.shadowColor = "#ffe08a";
+    context.shadowBlur = 16;
+    context.strokeStyle = "#ffe08a";
+    context.lineWidth = Math.max(3, size * 0.009);
+    context.stroke();
+    context.restore();
+
+    const highlightedName = participants[pointerIndex].name.trim();
+    const labelFontSize = Math.max(9, Math.min(17, size * 0.033));
+    const labelMaxWidth = radius * 0.68;
+    context.save();
+    context.font = `700 ${labelFontSize}px Inter, sans-serif`;
+    const words = highlightedName.split(/\s+/);
+    const lines: string[] = [];
+    let line = "";
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && context.measureText(next).width > labelMaxWidth) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = next;
+      }
+    }
+    if (line) lines.push(line);
+    const visibleLines = lines.slice(0, 2).map((text) => {
+      let label = text;
+      while (label.length > 1 && context.measureText(label).width > labelMaxWidth) {
+        label = `${label.slice(0, -2)}…`;
+      }
+      return label;
+    });
+    if (lines.length > visibleLines.length && visibleLines.length > 0) {
+      let lastLine = visibleLines[visibleLines.length - 1];
+      while (lastLine.length > 1 && context.measureText(`${lastLine}…`).width > labelMaxWidth) {
+        lastLine = `${lastLine.slice(0, -2)}…`;
+      }
+      visibleLines[visibleLines.length - 1] = `${lastLine}…`;
+    }
+    const lineHeight = labelFontSize * 1.15;
+    const labelHeight = lineHeight * visibleLines.length + labelFontSize * 0.5;
+    const labelWidth = labelMaxWidth + labelFontSize;
+    const labelX = center + radius * 0.57;
+    const labelY = center;
+    context.fillStyle = "rgba(255, 220, 137, 0.96)";
+    context.strokeStyle = "#fff0bd";
+    context.lineWidth = 1;
+    context.shadowColor = "#000";
+    context.shadowBlur = 8;
+    context.fillRect(labelX - labelWidth / 2, labelY - labelHeight / 2, labelWidth, labelHeight);
+    context.shadowBlur = 0;
+    context.strokeRect(labelX - labelWidth / 2, labelY - labelHeight / 2, labelWidth, labelHeight);
+    context.fillStyle = "#30200d";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    visibleLines.forEach((text, index) => {
+      const y = labelY + (index - (visibleLines.length - 1) / 2) * lineHeight;
+      context.fillText(text, labelX, y, labelMaxWidth);
+    });
+    context.restore();
   }
 
   context.beginPath();
@@ -75,57 +155,13 @@ function paint(canvas: HTMLCanvasElement, participants: Participant[], settings:
   context.lineWidth = 5;
   context.stroke();
   context.beginPath();
-  const hubRadius = participants.length > 0 ? Math.max(34, size * 0.11) : Math.max(15, size * 0.055);
+  const hubRadius = Math.max(34, size * 0.11);
   context.arc(center, center, hubRadius, 0, TAU);
   context.fillStyle = settings.background;
   context.fill();
   context.strokeStyle = settings.borderColor;
   context.lineWidth = 3;
   context.stroke();
-  if (participants.length > 0) {
-    const pointerOffset = ((POINTER_ANGLE + Math.PI / 2 - rotation) % TAU + TAU) % TAU;
-    const selected = participants[Math.floor(pointerOffset / slice)];
-    if (selected) {
-      const maxWidth = hubRadius * 1.65;
-      const fontSize = Math.max(8, Math.min(13, size * 0.027));
-      context.fillStyle = settings.textColor;
-      context.font = `700 ${fontSize}px Inter, sans-serif`;
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      const words = selected.name.trim().split(/\s+/);
-      const lines: string[] = [];
-      let line = "";
-      for (const word of words) {
-        const next = line ? `${line} ${word}` : word;
-        if (line && context.measureText(next).width > maxWidth) {
-          lines.push(line);
-          line = word;
-        } else {
-          line = next;
-        }
-      }
-      if (line) lines.push(line);
-      const visibleLines = lines.slice(0, 2).map((text) => {
-        let label = text;
-        while (label.length > 1 && context.measureText(label).width > maxWidth) {
-          label = `${label.slice(0, -2)}…`;
-        }
-        return label;
-      });
-      if (lines.length > visibleLines.length && visibleLines.length > 0) {
-        let lastLine = visibleLines[visibleLines.length - 1];
-        while (lastLine.length > 1 && context.measureText(`${lastLine}…`).width > maxWidth) {
-          lastLine = `${lastLine.slice(0, -2)}…`;
-        }
-        visibleLines[visibleLines.length - 1] = `${lastLine}…`;
-      }
-      const lineHeight = fontSize * 1.15;
-      visibleLines.forEach((text, index) => {
-        const y = center + (index - (visibleLines.length - 1) / 2) * lineHeight;
-        context.fillText(text, center, y, maxWidth);
-      });
-    }
-  }
   if (participants.length === 0) {
     context.textAlign = "center";
     context.textBaseline = "middle";
@@ -183,5 +219,8 @@ export const Wheel = forwardRef<WheelHandle, WheelProps>(function Wheel({ partic
     },
   }), [participants, settings]);
 
-  return <canvas ref={canvasRef} className="wheel-canvas" aria-label="Prize wheel" />;
+  return <>
+    <canvas ref={canvasRef} className="wheel-canvas" aria-label="Prize wheel" />
+    <img className="wheel-center-logo" src={`${import.meta.env.BASE_URL}logo-center.png`} alt="" aria-hidden="true" />
+  </>;
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consumeOverride, POINTER_ANGLE, removeParticipantById, targetRotation, weightedIndexForRoll } from "./engine";
+import { consumeOverride, POINTER_ANGLE, removeParticipantById, segmentIndexAtPointer, targetRotation, weightedIndexForRoll } from "./engine";
 import type { Participant } from "./types";
 
 const participants: Participant[] = [
@@ -25,7 +25,7 @@ describe("weighted selection", () => {
 describe("wheel alignment", () => {
   it.each([1, 2, 17, 100])("stops at the center of the requested segment for %i entries", (count) => {
     const index = count - 1;
-    const rotation = targetRotation(2.3, index, count, 5);
+    const rotation = targetRotation(2.3, index, count, 5, -Math.PI / 2);
     const pointerPosition = ((-Math.PI / 2 - (-Math.PI / 2 + rotation)) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
     const slice = (Math.PI * 2) / count;
     const segmentStart = index * slice;
@@ -37,11 +37,12 @@ describe("wheel alignment", () => {
   it.each([1, 2, 17, 100])("stops the requested segment under the right-side pointer for %i entries", (count) => {
     const index = count - 1;
     const rotation = targetRotation(2.3, index, count, 5, POINTER_ANGLE);
-    const pointerPosition = ((POINTER_ANGLE - (-Math.PI / 2 + rotation)) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-    const slice = (Math.PI * 2) / count;
-    const segmentCenter = index * slice + slice / 2;
-    const error = Math.abs(((pointerPosition - segmentCenter + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-    expect(error).toBeLessThan(1e-10);
+    expect(segmentIndexAtPointer(rotation, count, POINTER_ANGLE)).toBe(index);
+  });
+
+  it("reports the segment passing through the fixed pointer as the wheel rotates", () => {
+    expect(segmentIndexAtPointer(Math.PI / 2, 4, POINTER_ANGLE)).toBe(0);
+    expect(segmentIndexAtPointer(-Math.PI / 4, 4, POINTER_ANGLE)).toBe(1);
   });
 
   it("rejects an invalid selected segment", () => {
