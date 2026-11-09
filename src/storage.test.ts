@@ -14,4 +14,13 @@ describe("validateData", () => {
   it("accepts valid session data from any source", () => {
     expect(validateData(structuredClone(DEFAULT_DATA), "shared event")).toEqual(DEFAULT_DATA);
   });
+
+  it("accepts JSON-encoded session data from a shared event", () => {
+    expect(validateData(JSON.stringify(DEFAULT_DATA), "shared event")).toEqual(DEFAULT_DATA);
+  });
+
+  it("reports malformed JSON session data by source", () => {
+    expect(() => validateData("{", "shared event"))
+      .toThrow("The shared event contains malformed JSON session data.");
+  });
 });

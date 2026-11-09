@@ -48,6 +48,13 @@ export async function saveData(data: AppData): Promise<void> {
 export function validateData(value: unknown, source: DataSource = "backup file"): AppData {
   const sourceLabel = source === "saved browser session" ? "The saved browser session" :
     source === "shared event" ? "The shared event" : "The backup file";
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      throw new Error(`${sourceLabel} contains malformed JSON session data.`);
+    }
+  }
   if (!value || typeof value !== "object") throw new Error(`${sourceLabel} does not contain valid session data.`);
   const candidate = value as Partial<AppData>;
   if (!Array.isArray(candidate.participants) || !Array.isArray(candidate.winners)) {
