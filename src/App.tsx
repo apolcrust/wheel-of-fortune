@@ -206,6 +206,7 @@ function App() {
             setCustomPalette(remoteData.settings.colors.join(", "));
             setEventOwnerId(row.owner_id);
             setRemoteBusy(row.is_spinning);
+            setStorageError("");
             setReady(true);
           }
         } catch (error) {
@@ -249,6 +250,26 @@ function App() {
       }, (payload) => {
         if (payload.eventType === "DELETE") return;
         const row = payload.new as { owner_id: string; data: unknown; is_spinning: boolean };
+        if (!("data" in row) || row.data === undefined) {
+          void (async () => {
+            const { data: refreshedRow, error } = await remoteClient.from("wheel_events")
+              .select("id, owner_id, data, is_spinning")
+              .eq("id", eventId)
+              .maybeSingle();
+            if (error) throw error;
+            if (!refreshedRow) throw new Error("This shared wheel event was not found or is no longer available.");
+            const remoteData = validateData(refreshedRow.data, "shared event");
+            latestWinnerObservationRef.current = winnerObservation(remoteData.winners[0]);
+            receivedDataRef.current = remoteData;
+            setData((current) => JSON.stringify(current) === JSON.stringify(remoteData) ? current : remoteData);
+            setEventOwnerId(refreshedRow.owner_id);
+            setRemoteBusy(refreshedRow.is_spinning);
+            setStorageError("");
+          })().catch((error: unknown) => {
+            setStorageError(error instanceof Error ? error.message : "The shared wheel could not be refreshed.");
+          });
+          return;
+        }
         try {
           const remoteData = validateData(row.data, "shared event");
           const latestWinner = remoteData.winners[0];
@@ -265,6 +286,7 @@ function App() {
           setData((current) => JSON.stringify(current) === JSON.stringify(remoteData) ? current : remoteData);
           setEventOwnerId(row.owner_id);
           setRemoteBusy(row.is_spinning);
+          setStorageError("");
         } catch (error) {
           setStorageError(error instanceof Error ? error.message : "The shared wheel data is invalid.");
         }
