@@ -5,19 +5,17 @@ export const POINTER_ANGLE = 0;
 
 export function wheelSpinProgress(progress: number): number {
   const clampedProgress = Math.min(1, Math.max(0, progress));
-  const decelerationStart = 0.6;
+  const decelerationStart = 0.45;
   const decelerationDuration = 1 - decelerationStart;
-  const totalDistance = decelerationStart + decelerationDuration / 2;
+  const cruiseDistance = (3 * decelerationStart) / (1 + 2 * decelerationStart);
 
   if (clampedProgress <= decelerationStart) {
-    return clampedProgress / totalDistance;
+    return (clampedProgress / decelerationStart) * cruiseDistance;
   }
 
   const decelerationProgress = (clampedProgress - decelerationStart) / decelerationDuration;
-  const decelerationDistance = decelerationDuration * (
-    decelerationProgress / 2 + Math.sin(Math.PI * decelerationProgress) / (2 * Math.PI)
-  );
-  return (decelerationStart + decelerationDistance) / totalDistance;
+  const remainingDistance = 1 - cruiseDistance;
+  return cruiseDistance + remainingDistance * (1 - (1 - decelerationProgress) ** 3);
 }
 
 export function secureRandomInt(maxExclusive: number): number {

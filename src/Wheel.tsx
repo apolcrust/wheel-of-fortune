@@ -177,12 +177,12 @@ function paint(
     for (const highlight of highlights) {
       const fontSize = Math.max(10, Math.min(20, size * 0.03));
       const lineHeight = fontSize * 1.12;
-      const labelRadius = radius * 0.57;
+      const labelRadius = radius * 0.52;
       const maxWidth = Math.max(
         fontSize * 2,
         Math.min(
           radius * 0.48,
-          2 * labelRadius * Math.sin(highlightSlice / 2) * 0.76,
+          2 * labelRadius * Math.sin(highlightSlice / 2) * 0.8,
         ),
       );
       context.save();
@@ -199,7 +199,10 @@ function paint(
         center + Math.cos(highlight.offset) * labelRadius,
         center + Math.sin(highlight.offset) * labelRadius,
       );
-      context.rotate(highlight.offset);
+      let labelRotation = Math.abs(highlight.offset) < 1e-8 ? 0 : highlight.offset + Math.PI / 2;
+      if (labelRotation > Math.PI / 2) labelRotation -= Math.PI;
+      if (labelRotation < -Math.PI / 2) labelRotation += Math.PI;
+      context.rotate(labelRotation);
       context.font = `700 ${fontSize}px Inter, sans-serif`;
       context.textAlign = "center";
       context.textBaseline = "middle";

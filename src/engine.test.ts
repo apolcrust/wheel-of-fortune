@@ -25,8 +25,11 @@ describe("weighted selection", () => {
 describe("wheel alignment", () => {
   it("holds speed until the final part of the spin, then decelerates smoothly", () => {
     expect(wheelSpinProgress(0)).toBe(0);
-    expect(wheelSpinProgress(0.6)).toBeCloseTo(0.75);
-    expect(wheelSpinProgress(0.8)).toBeGreaterThan(0.9);
+    expect(wheelSpinProgress(0.45)).toBeCloseTo(0.7105263158);
+    expect(wheelSpinProgress(0.8)).toBeGreaterThan(0.98);
+    expect(wheelSpinProgress(0.99) - wheelSpinProgress(0.9)).toBeLessThan(
+      wheelSpinProgress(0.6) - wheelSpinProgress(0.5),
+    );
     expect(wheelSpinProgress(1)).toBe(1);
     expect(wheelSpinProgress(-1)).toBe(0);
     expect(wheelSpinProgress(2)).toBe(1);

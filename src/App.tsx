@@ -46,6 +46,15 @@ function keyLabel(code: string) {
   return code.startsWith("Key") ? code.slice(3) : code.startsWith("Digit") ? code.slice(5) : code;
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object" && "message" in error &&
+      typeof error.message === "string" && error.message) {
+    return error.message;
+  }
+  return fallback;
+}
+
 function winnerObservation(winner: Winner | undefined) {
   return winner ? {
     key: `${winner.spinNumber}:${winner.participant.id}:${winner.timestamp}`,
@@ -569,7 +578,12 @@ function App() {
         await updateSharedParticipants("remove", id);
         return true;
       } catch (error) {
-        notify(error instanceof Error ? error.message : "The participant could not be removed.", "error");
+        const message = getErrorMessage(error, "The participant could not be removed.");
+        if (message.toLocaleLowerCase().includes("no longer on the wheel")) {
+          notify("This winner is already off the wheel. Apply the latest Supabase schema to prevent automatic removal after spins.", "error");
+        } else {
+          notify(message, "error");
+        }
         return false;
       }
     }
