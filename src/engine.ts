@@ -3,9 +3,40 @@ import type { Participant } from "./types";
 const TAU = Math.PI * 2;
 export const POINTER_ANGLE = 0;
 
+// Spin timing: a constant fast rotation, then a smooth slow-motion stop.
+export const FAST_PHASE_SECONDS = 3;
+export const SLOW_PHASE_SECONDS = 2;
+export const SPIN_DURATION_SECONDS = FAST_PHASE_SECONDS + SLOW_PHASE_SECONDS;
+
+// The three highlighted triangles tile the half-wheel centred on the pointer.
+// The middle one is centred exactly on the pointer, so it is the winning slot.
+export const HIGHLIGHT_COUNT = 3;
+export const HIGHLIGHT_HALF_ANGLE = Math.PI / 2;
+export const WINNER_HIGHLIGHT = Math.floor(HIGHLIGHT_COUNT / 2);
+
+export interface HighlightBounds {
+  start: number;
+  end: number;
+  offset: number;
+}
+
+/** Angular bounds of each highlighted triangle, relative to the pointer. */
+export function highlightBounds(): HighlightBounds[] {
+  const slice = (HIGHLIGHT_HALF_ANGLE * 2) / HIGHLIGHT_COUNT;
+  return Array.from({ length: HIGHLIGHT_COUNT }, (_, index) => {
+    const offset = (index - (HIGHLIGHT_COUNT - 1) / 2) * slice;
+    return { start: offset - slice / 2, end: offset + slice / 2, offset };
+  });
+}
+
+/**
+ * Speed is constant for FAST_PHASE_SECONDS, then follows a cubic ease-out over
+ * SLOW_PHASE_SECONDS. The cruise distance is chosen so the speed is identical at
+ * the hand-over (no jerk) and falls to exactly zero at the end (no abrupt stop).
+ */
 export function wheelSpinProgress(progress: number): number {
   const clampedProgress = Math.min(1, Math.max(0, progress));
-  const decelerationStart = 0.45;
+  const decelerationStart = FAST_PHASE_SECONDS / SPIN_DURATION_SECONDS;
   const decelerationDuration = 1 - decelerationStart;
   const cruiseDistance = (3 * decelerationStart) / (1 + 2 * decelerationStart);
 
@@ -105,4 +136,16 @@ export function segmentIndexAtPointer(
   const slice = TAU / count;
   const offset = ((pointerAngle + Math.PI / 2 - rotation) % TAU + TAU) % TAU;
   return Math.min(count - 1, Math.floor(offset / slice));
+}
+
+/** The winning segment: the one under the pointer at this rotation. */
+export function winnerIndexAtRotation(rotation: number, count: number): number {
+  return segmentIndexAtPointer(rotation, count, POINTER_ANGLE);
+}
+
+/** Segment shown in each highlighted triangle (the middle one is the winner). */
+export function highlightedSegmentIndices(rotation: number, count: number): number[] {
+  return highlightBounds().map((bounds) =>
+    segmentIndexAtPointer(rotation, count, POINTER_ANGLE + bounds.offset),
+  );
 }

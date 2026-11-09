@@ -6,7 +6,7 @@ import {
   ListPlus, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, Settings2, ShieldCheck,
   Sparkles, Trash2, Trophy, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
-import { pickRandomIndex, targetRotation, POINTER_ANGLE } from "./engine";
+import { pickRandomIndex, targetRotation, POINTER_ANGLE, SPIN_DURATION_SECONDS } from "./engine";
 import { loadData, saveData, validateData } from "./storage";
 import type { AppData, Participant, WheelSettings, Winner } from "./types";
 import { DEFAULT_DATA, DEFAULT_SETTINGS } from "./types";
@@ -18,8 +18,6 @@ import type { Session } from "@supabase/supabase-js";
 
 type Dialog = "participants" | "import" | "settings" | "history" | null;
 type Toast = { id: number; message: string; tone: "success" | "error" };
-
-const SPIN_DURATION_SECONDS = 5;
 
 function makeParticipant(name: string, weight = 1): Participant {
   return { id: crypto.randomUUID(), name: name.trim(), weight };
@@ -452,19 +450,28 @@ function App() {
         mode = override >= 0 ? "controlled" : "random";
         index = override >= 0 ? override : pickRandomIndex(data.participants);
       }
-      const selected = data.participants[index];
+      // The wheel animates this exact roster and the winner is read back from it, so the
+      // wheel, the triangle names and the announced winner all use the same state.
+      const spinRoster = data.participants;
+      const intended = spinRoster[index];
       if (data.settings.sound) {
         try { playTone(220, 0.18, 0.45); }
         catch (error) { notify(error instanceof Error ? error.message : "Spin sound could not be played.", "error"); }
       }
       const start = wheelRef.current?.rotation ?? 0;
-      await wheelRef.current?.spinTo(targetRotation(
+      const landedIndex = await wheelRef.current?.spinTo(targetRotation(
         start,
         index,
-        data.participants.length,
+        spinRoster.length,
         data.settings.rotations,
         POINTER_ANGLE,
-      ), SPIN_DURATION_SECONDS * 1000);
+      ), SPIN_DURATION_SECONDS * 1000, spinRoster) ?? index;
+      // The winner is whoever is under the pointer at the wheel's final rotation.
+      const selected = spinRoster[landedIndex];
+      if (!selected) throw new Error("The wheel stopped on an invalid segment.");
+      if (spinId && selected.id !== intended.id) {
+        throw new Error("The wheel stopped on a different participant than the shared draw selected. Refresh and try again.");
+      }
       if (supabase && eventId && spinId) {
         const { data: completedData, error } = await supabase.rpc("finish_wheel_spin", {
           p_event_id: eventId,
