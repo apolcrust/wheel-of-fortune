@@ -17,6 +17,7 @@ export interface WheelSettings {
   title: string;
   duration: number;
   rotations: number;
+  autoRemove: boolean;
   sound: boolean;
   confetti: boolean;
   shortcut: string;
@@ -38,6 +39,7 @@ export const DEFAULT_SETTINGS: WheelSettings = {
   title: "THE GRAND DRAW",
   duration: 5,
   rotations: 6,
+  autoRemove: true,
   sound: true,
   confetti: true,
   shortcut: "KeyO",

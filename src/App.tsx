@@ -62,23 +62,12 @@ function winnerObservation(winner: Winner | undefined) {
   } : null;
 }
 
-function WinnerAnnouncement({ winner, confetti, onRemove, onClose }: {
+function WinnerAnnouncement({ winner, confetti, autoRemove, onClose }: {
   winner: Winner;
   confetti: boolean;
-  onRemove: () => Promise<boolean>;
+  autoRemove: boolean;
   onClose: () => void;
 }) {
-  const [removing, setRemoving] = useState(false);
-
-  const removeWinner = async () => {
-    setRemoving(true);
-    try {
-      if (await onRemove()) onClose();
-    } finally {
-      setRemoving(false);
-    }
-  };
-
   return <div className="modal-backdrop winner-backdrop" role="presentation" onMouseDown={(event) => {
     if (event.target === event.currentTarget) onClose();
   }}>
@@ -91,11 +80,8 @@ function WinnerAnnouncement({ winner, confetti, onRemove, onClose }: {
       <div className="winner-icon"><Trophy size={28} /></div><div className="eyebrow">THE WHEEL HAS SPOKEN</div>
       <h2 id="winner-heading">Congratulations!</h2><p className="winner-name">{winner.participant.name}</p>
 
-      <p className="winner-removal-note">The winner will stay on the wheel unless you remove them.</p>
+      {autoRemove && <p className="winner-removed">Has been removed from the wheel.</p>}
       <div className="winner-actions">
-        <button className="button button-outline winner-remove" disabled={removing} onClick={() => void removeWinner()}>
-          <Trash2 size={15} />{removing ? "Removing…" : "Remove winner from wheel"}
-        </button>
         <button className="button button-primary winner-continue" onClick={onClose}><Check size={16} /> Continue</button>
       </div>
     </section>
@@ -508,6 +494,9 @@ function App() {
       latestWinnerObservationRef.current = winnerObservation(record);
       setData((state) => ({
         ...state,
+        participants: state.settings.autoRemove
+          ? state.participants.filter((person) => person.id !== selected.id)
+          : state.participants,
         winners: [record, ...state.winners],
         overrideParticipantId: mode === "controlled" ? null : state.overrideParticipantId,
         overrideActivated: mode === "controlled" ? false : state.overrideActivated,
@@ -594,15 +583,6 @@ function App() {
       overrideActivated: current.overrideParticipantId === id ? false : current.overrideActivated,
     }));
     return true;
-  };
-
-  const removeAnnouncedWinner = async (id: string) => {
-    const removed = await removeParticipant(id);
-    if (removed) {
-      setStoppedWinner(null);
-      notify("Winner removed from the active wheel.");
-    }
-    return removed;
   };
 
   const removeDuplicateParticipantsFromList = async () => {
@@ -1027,7 +1007,7 @@ function App() {
       </section>
       <footer className="public-footer">YOUR EVENT. YOUR MOMENT.</footer>
       {lastWinner && <WinnerAnnouncement winner={lastWinner} confetti={data.settings.confetti}
-        onRemove={() => removeAnnouncedWinner(lastWinner.participant.id)} onClose={() => setLastWinner(null)} />}
+        autoRemove={data.settings.autoRemove} onClose={() => setLastWinner(null)} />}
       {dialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
         <section className={`dialog ${dialog === "participants" || dialog === "history" ? "dialog-wide" : ""}`} role="dialog" aria-modal="true">
           <header className="dialog-header"><div><span className="eyebrow">FORTUNE / WHEEL</span>
@@ -1258,7 +1238,7 @@ function App() {
       <footer className="page-footer"><span>YOUR EVENT. YOUR MOMENT.</span><span>Session saved locally on this device <span className="saved-dot" /></span></footer>
 
       {lastWinner && <WinnerAnnouncement winner={lastWinner} confetti={data.settings.confetti}
-        onRemove={() => removeAnnouncedWinner(lastWinner.participant.id)} onClose={() => setLastWinner(null)} />}
+        autoRemove={data.settings.autoRemove} onClose={() => setLastWinner(null)} />}
 
       {dialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
         <section className={`dialog ${dialog === "participants" || dialog === "history" ? "dialog-wide" : ""}`} role="dialog" aria-modal="true">
@@ -1351,7 +1331,7 @@ function App() {
               <label><span>Segment text</span><input aria-label="Segment text color" type="color" value={data.settings.textColor} onChange={(event) => updateSettings({ textColor: event.target.value })} /></label>
               <label><span>Segment borders</span><input aria-label="Segment border color" type="color" value={data.settings.borderColor} onChange={(event) => updateSettings({ borderColor: event.target.value })} /></label>
             </div>
-            <div className="winner-removal-setting"><Trash2 size={15} /><span><strong>Winner removal</strong><small>Winners stay on the wheel until you remove them from the announcement.</small></span></div>
+            <label className="check-setting"><input type="checkbox" checked={data.settings.autoRemove} onChange={(event) => updateSettings({ autoRemove: event.target.checked })} /><span>Remove each winner from the active wheel</span></label>
             <label className="check-setting"><input type="checkbox" checked={data.settings.sound} onChange={(event) => updateSettings({ sound: event.target.checked })} /><span>Enable spin and winner sounds</span></label>
             <label className="check-setting"><input type="checkbox" checked={data.settings.confetti} onChange={(event) => updateSettings({ confetti: event.target.checked })} /><span>Celebrate winners with confetti</span></label>
             <div className="shortcut-setting"><div><strong>Desktop shortcut (optional)</strong><span>You can also activate a one-time pick with the button on the draw controls.</span></div>
