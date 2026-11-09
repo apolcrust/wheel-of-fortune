@@ -770,9 +770,6 @@ function App() {
             <span><strong>{data.winners.length}</strong> winners drawn</span></div>
           {data.winners[0] && <div className="public-latest">
             <Trophy size={15} /><span>Latest winner: <strong>{data.winners[0].participant.name}</strong></span>
-            <span className={`mode-pill mode-${data.winners[0].mode}`}>
-              {data.winners[0].mode === "controlled" ? "OPERATOR PICK" : `${data.winners[0].mode.toUpperCase()} DRAW`}
-            </span>
           </div>}
         </div>
         <aside className="public-details">
