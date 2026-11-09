@@ -10,14 +10,12 @@ export interface WheelHandle {
 
 const TAU = Math.PI * 2;
 const HIGHLIGHT_HALF_ANGLE = Math.PI / 2;
-const HIGHLIGHT_COUNT = 5;
+const HIGHLIGHT_COUNT = 3;
 
 const HIGHLIGHT_COLORS = [
   ["#fff45a", "#ffc21c", "#e98206"],
   ["#ffe643", "#f7a30b", "#d56b03"],
   ["#ffdf35", "#f29a08", "#c85e02"],
-  ["#fff052", "#ffae0c", "#dc7003"],
-  ["#ffe743", "#f39208", "#ca5c02"],
 ] as const;
 
 interface WheelProps {
@@ -106,8 +104,7 @@ function paint(
 
     const hubRadius = Math.max(34, size * 0.11);
     const focusInnerRadius = hubRadius + 2;
-    const highlightSlice =
-      (HIGHLIGHT_HALF_ANGLE * 2) / HIGHLIGHT_COUNT;
+    const highlightSlice = (HIGHLIGHT_HALF_ANGLE * 2) / HIGHLIGHT_COUNT;
 
     const highlights = Array.from(
       { length: HIGHLIGHT_COUNT },
@@ -137,7 +134,7 @@ function paint(
       },
     );
 
-    // Draw the five connected golden sections.
+    // Draw the three connected golden sections.
     context.save();
 
     for (const highlight of highlights) {
@@ -220,10 +217,10 @@ function paint(
 
     context.restore();
 
-    // Draw names inside the five highlighted sections.
+    // Draw names inside the three highlighted sections.
     for (const highlight of highlights) {
-      const fontSize = Math.max(10, Math.min(22, size * 0.032));
-      const lineHeight = fontSize * 1.12;
+      const fontSize = Math.max(11, Math.min(21, size * 0.035));
+      const lineHeight = fontSize * 1.15;
 
       context.save();
       context.beginPath();
@@ -248,14 +245,14 @@ function paint(
       context.save();
 
       context.translate(
-        center + Math.cos(highlight.offset) * radius * 0.74,
-        center + Math.sin(highlight.offset) * radius * 0.74,
+        center + Math.cos(highlight.offset) * radius * 0.70,
+        center + Math.sin(highlight.offset) * radius * 0.70,
       );
 
       context.rotate(highlight.offset);
 
       const highlightedName = highlight.name;
-      const maxWidth = radius * 0.4;
+      const maxWidth = radius * 0.48;
 
       context.font = `700 ${fontSize}px Inter, sans-serif`;
 
@@ -300,7 +297,7 @@ function paint(
         Math.min(
           5,
           Math.floor(
-            (radius * 0.74 * highlightSlice * 0.9) / lineHeight,
+            (radius * 0.70 * highlightSlice * 0.95) / lineHeight,
           ),
         ),
       );
