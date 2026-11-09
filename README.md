@@ -37,6 +37,6 @@ In Supabase **Authentication → URL Configuration**, set the Site URL to the pu
 4. Use **Copy audience link** for the display device and **Copy operator link** for the phone/operator.
 5. The audience page can spin; operator changes and completed draws update the event across connected devices.
 
-Anyone with the audience event link can view its participant names, settings, and winner history and can request a spin. Only the authenticated event owner can change participants, settings, or the one-time operator selection. Operator-selected winners are disclosed in the audience results. Use **Copy operator link** only for the trusted operator.
+Anyone with the audience event link can view its participant names, settings, and winner history, request a spin, and manage the participant list (add or remove names, import a spreadsheet, and remove duplicates). Apply the latest `supabase/schema.sql` to enable shared participant management. Share the audience link only with people trusted to change the roster. Only the authenticated event owner can change settings or the one-time operator selection. Operator-selected winners are disclosed in the audience results. Use **Copy operator link** only for the trusted operator.
 
 Supabase free-plan limits and email delivery restrictions may apply. Configure an SMTP provider in Supabase if the default email delivery limits are insufficient.

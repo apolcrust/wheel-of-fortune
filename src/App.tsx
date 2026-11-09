@@ -13,6 +13,7 @@ import { DEFAULT_DATA, DEFAULT_SETTINGS } from "./types";
 import { Wheel, type WheelHandle } from "./Wheel";
 import { useOperatorShortcut } from "./operatorShortcut";
 import { supabase, supabaseConfigurationError } from "./supabaseClient";
+import { findDuplicateParticipantIds, normalizeParticipantName, removeDuplicateParticipants } from "./participants";
 import type { Session } from "@supabase/supabase-js";
 
 type Dialog = "participants" | "import" | "settings" | "history" | null;
@@ -104,7 +105,7 @@ function App() {
   const [columnIndex, setColumnIndex] = useState(0);
   const [hasHeader, setHasHeader] = useState(true);
   const [importAction, setImportAction] = useState<"append" | "replace">("append");
-  const [keepDuplicates, setKeepDuplicates] = useState(true);
+  const [keepDuplicates, setKeepDuplicates] = useState(false);
   const backupInput = useRef<HTMLInputElement>(null);
   const [capturingShortcut, setCapturingShortcut] = useState(false);
   const [customPalette, setCustomPalette] = useState("");
@@ -377,6 +378,10 @@ function App() {
       .filter(({ participant }) => participant.name.toLocaleLowerCase().includes(query));
   }, [data.participants, overrideSearch]);
   const selectedOverrideParticipant = data.participants.find((person) => person.id === data.overrideParticipantId);
+  const duplicateParticipantIds = useMemo(() => findDuplicateParticipantIds(data.participants), [data.participants]);
+  const newNameAlreadyExists = !isOperator && data.participants.some(
+    (person) => normalizeParticipantName(person.name) === normalizeParticipantName(newName),
+  );
   const spinLocked = busy || remoteBusy || importPending;
   const activateOverride = useCallback(() => {
     if (!eligibleOverride || spinLocked) return;
@@ -495,21 +500,101 @@ function App() {
     }
   };
 
-  const addParticipant = () => {
+  const updateSharedParticipants = async (
+    action: "add" | "remove" | "deduplicate",
+    participantId?: string,
+    name?: string,
+  ) => {
+    if (!supabase || !eventId) throw new Error("Shared participant management is unavailable for this event.");
+    setImportPending(true);
+    try {
+      const { data: result, error } = await supabase.rpc("manage_wheel_participants", {
+        p_event_id: eventId,
+        p_action: action,
+        p_participant_id: participantId ?? null,
+        p_name: name ?? null,
+      });
+      if (error) throw error;
+      const updated = validateData(result, "shared event");
+      receivedDataRef.current = updated;
+      setData(updated);
+    } finally {
+      setImportPending(false);
+    }
+  };
+
+  const addParticipant = async () => {
     if (spinLocked) return;
     const name = newName.trim();
     if (!name) return;
-    setData((current) => ({ ...current, participants: [...current.participants, makeParticipant(name)] }));
+    if (!isOperator && newNameAlreadyExists) {
+      notify("That participant name is already on the wheel.", "error");
+      return;
+    }
+    if (!isOperator && supabase && eventId) {
+      try {
+        await updateSharedParticipants("add", undefined, name);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "The participant could not be added.", "error");
+        return;
+      }
+    } else {
+      setData((current) => ({ ...current, participants: [...current.participants, makeParticipant(name)] }));
+    }
     setNewName("");
+    notify(`${name} added to the wheel.`);
   };
 
-  const removeParticipant = (id: string) => {
+  const removeParticipant = async (id: string) => {
+    if (spinLocked) return;
+    if (!isOperator && supabase && eventId) {
+      try {
+        await updateSharedParticipants("remove", id);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "The participant could not be removed.", "error");
+      }
+      return;
+    }
     setData((current) => ({
       ...current,
       participants: current.participants.filter((person) => person.id !== id),
       overrideParticipantId: current.overrideParticipantId === id ? null : current.overrideParticipantId,
       overrideActivated: current.overrideParticipantId === id ? false : current.overrideActivated,
     }));
+  };
+
+  const removeDuplicateParticipantsFromList = async () => {
+    const duplicateCount = duplicateParticipantIds.size;
+    if (spinLocked || duplicateCount === 0) return;
+    if (!isOperator && supabase && eventId) {
+      try {
+        await updateSharedParticipants("deduplicate");
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "Duplicate participants could not be removed.", "error");
+        return;
+      }
+    } else {
+      setData((current) => {
+        const participants = removeDuplicateParticipants(current.participants);
+        const keptIds = new Set(participants.map((person) => person.id));
+        const overrideRemoved = current.overrideParticipantId !== null && !keptIds.has(current.overrideParticipantId);
+        return {
+          ...current,
+          participants,
+          overrideParticipantId: overrideRemoved ? null : current.overrideParticipantId,
+          overrideActivated: overrideRemoved ? false : current.overrideActivated,
+        };
+      });
+    }
+    notify(`Removed ${duplicateCount} duplicate participant entr${duplicateCount === 1 ? "y" : "ies"}.`);
+  };
+
+  const verifyParticipantNames = () => {
+    if (duplicateParticipantIds.size === 0) {
+      notify("Verified: no duplicate participant names found.");
+    } else {
+      notify(`Found ${duplicateParticipantIds.size} duplicate participant entr${duplicateParticipantIds.size === 1 ? "y" : "ies"}.`, "error");
+    }
   };
 
   const loadWorkbook = async (file: File) => {
@@ -526,6 +611,8 @@ function App() {
       setSheetRows(rows);
       setSheetName(workbook.SheetNames[0]);
       setColumnIndex(0);
+      setImportAction("append");
+      setKeepDuplicates(isOperator);
       setDialog("import");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Could not read this spreadsheet.", "error");
@@ -533,7 +620,7 @@ function App() {
   };
 
   const importRows = useMemo(() => {
-    if (!importBook || !sheetName) return { columns: [] as string[], names: [] as string[], empty: 0, missing: 0, duplicates: 0 };
+    if (!importBook || !sheetName) return { columns: [] as string[], names: [] as string[], empty: 0, missing: 0 };
     const rows = sheetRows[sheetName] ?? [];
     const first = rows[0] ?? [];
     const columns = first.map((value, index) => {
@@ -546,29 +633,39 @@ function App() {
     const names = nonEmptyRows
       .map((row) => String(row[columnIndex] ?? "").trim())
       .filter(Boolean);
-    const seen = new Set<string>();
-    let duplicates = 0;
-    for (const name of names) {
-      const key = name.toLocaleLowerCase();
-      if (seen.has(key)) duplicates += 1;
-      else seen.add(key);
-    }
-    return { columns, names, empty: dataRows.length - nonEmptyRows.length, missing: nonEmptyRows.length - names.length, duplicates };
+    return { columns, names, empty: dataRows.length - nonEmptyRows.length, missing: nonEmptyRows.length - names.length };
   }, [sheetRows, sheetName, columnIndex, hasHeader]);
+  const importDuplicateCount = useMemo(() => {
+    const seen = new Set(importAction === "append"
+      ? data.participants.map((participant) => normalizeParticipantName(participant.name))
+      : []);
+    let duplicates = 0;
+    for (const name of importRows.names) {
+      const normalized = normalizeParticipantName(name);
+      if (seen.has(normalized)) duplicates += 1;
+      else seen.add(normalized);
+    }
+    return duplicates;
+  }, [data.participants, importAction, importRows.names]);
 
   const confirmImport = async () => {
     if (spinLocked) return;
     let names = importRows.names;
-    if (!keepDuplicates) {
+    const preserveDuplicates = isOperator && keepDuplicates;
+    if (!preserveDuplicates) {
       const seen = new Set(importAction === "append"
-        ? data.participants.map((participant) => participant.name.toLocaleLowerCase())
+        ? data.participants.map((participant) => normalizeParticipantName(participant.name))
         : []);
       names = names.filter((name) => {
-        const key = name.toLocaleLowerCase();
+        const key = normalizeParticipantName(name);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
+    }
+    if (names.length === 0) {
+      notify("No new participants were added because every name already exists.", "error");
+      return;
     }
     const incoming = names.map((name) => makeParticipant(name));
     setImportPending(true);
@@ -578,7 +675,7 @@ function App() {
           p_event_id: eventId,
           p_names: names,
           p_action: importAction,
-          p_keep_duplicates: keepDuplicates,
+          p_keep_duplicates: preserveDuplicates,
         });
         if (error) throw error;
         const updated = validateData(result, "shared event");
@@ -871,17 +968,7 @@ function App() {
                 <span>{person.name}</span><small>{person.weight > 1 ? `×${person.weight}` : ""}</small>
               </li>)}</ul>}
             <div className="public-participant-actions">
-              <label className={`button button-quiet file-button public-detail-action${spinLocked ? " is-disabled" : ""}`}>
-                <Upload size={15} /> Import Excel
-                <input type="file" accept=".xlsx,.xls,.csv" disabled={spinLocked}
-                  aria-label="Import participants from an Excel file"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void loadWorkbook(file);
-                    event.target.value = "";
-                  }} />
-              </label>
-              {!supabase && <button className="button button-quiet public-detail-action" disabled={spinLocked} onClick={() => setDialog("participants")}><ListPlus size={15} /> Manage participants</button>}
+              <button className="button button-quiet public-detail-action" disabled={spinLocked} onClick={() => setDialog("participants")}><ListPlus size={15} /> Manage participants</button>
             </div>
           </section>
           <section className="public-detail-card">
@@ -908,29 +995,39 @@ function App() {
           {dialog === "participants" && <div className="dialog-content">
             <div className="add-participant">
               <input value={newName} disabled={spinLocked} maxLength={100} placeholder="Add a participant name…" onChange={(event) => setNewName(event.target.value)}
-                onKeyDown={(event) => { if (event.key === "Enter") addParticipant(); }} />
-              <button className="button button-primary" onClick={addParticipant} disabled={spinLocked || !newName.trim()}><Plus size={16} /> Add</button>
+                onKeyDown={(event) => { if (event.key === "Enter") void addParticipant(); }} />
+              <button className="button button-primary" onClick={() => void addParticipant()} disabled={spinLocked || !newName.trim() || newNameAlreadyExists}><Plus size={16} /> Add</button>
             </div>
+            {newNameAlreadyExists && <p className="duplicate-input-note" role="alert">That name is already on the wheel.</p>}
             <div className="list-toolbar"><span>{data.participants.length} active participant{data.participants.length === 1 ? "" : "s"}</span>
               <div className="participant-file-actions">
-                <label className={`text-button file-button${spinLocked ? " is-disabled" : ""}`}><Upload size={14} /> Import Excel
-                  <input type="file" accept=".xlsx,.xls,.csv" disabled={spinLocked} onChange={(event) => {
+                <label className={`button button-outline file-button${spinLocked ? " is-disabled" : ""}`}><Upload size={14} /> Import Excel
+                  <input type="file" accept=".xlsx,.xls,.csv" disabled={spinLocked} aria-label="Import participants from an Excel file" onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) void loadWorkbook(file);
                     event.target.value = "";
                   }} />
                 </label>
-                <button className="text-button" onClick={() => void exportParticipants()} disabled={!data.participants.length}><Download size={14} /> Export Excel</button>
+                <button className="text-button" onClick={() => void exportParticipants()} disabled={!data.participants.length}><Download size={14} /> Export</button>
+              </div>
+            </div>
+            <div className={`duplicate-check${duplicateParticipantIds.size ? " has-duplicates" : ""}`} role="status">
+              <span><ShieldCheck size={16} />{duplicateParticipantIds.size
+                ? `${duplicateParticipantIds.size} duplicate participant entr${duplicateParticipantIds.size === 1 ? "y" : "ies"} found`
+                : "No duplicate participant names detected"}</span>
+              <div>
+                <button className="text-button" type="button" onClick={verifyParticipantNames}><Check size={14} /> Verify names</button>
+                <button className="text-button" type="button" disabled={spinLocked || duplicateParticipantIds.size === 0}
+                  onClick={() => void removeDuplicateParticipantsFromList()}><Trash2 size={14} /> Remove duplicates</button>
               </div>
             </div>
             {data.participants.length === 0 ? <div className="empty-state"><FileSpreadsheet size={22} /><p>No participants yet. Add names or import a spreadsheet.</p></div> :
               <div className="participant-list">{data.participants.map((person, index) => <div className="participant-row" key={person.id}>
                 <span className="row-index">{String(index + 1).padStart(2, "0")}</span>
-                <input aria-label={`Participant ${index + 1} name`} value={person.name} disabled={spinLocked}
-                  onChange={(event) => updateParticipant(person.id, { name: event.target.value })} />
-                <button className="icon-button danger-icon" aria-label={`Remove ${person.name}`} disabled={spinLocked} onClick={() => removeParticipant(person.id)}><Trash2 size={15} /></button>
+                <span className="participant-row-name">{person.name}</span>
+                <button className="icon-button danger-icon" aria-label={`Remove ${person.name}`} disabled={spinLocked} onClick={() => void removeParticipant(person.id)}><Trash2 size={15} /></button>
               </div>)}</div>}
-            <p className="dialog-note">Names remain unique by ID, even when duplicate names are allowed.</p>
+            <p className="dialog-note">New participant names are checked against the current list, ignoring letter case.</p>
           </div>}
           {dialog === "import" && <div className="dialog-content">
             {!importBook ? <div className="empty-state"><Upload size={22} /><p>Select an XLSX, XLS, or CSV file to begin.</p></div> : <>
@@ -940,10 +1037,9 @@ function App() {
               <label className="setting-field"><span>Name column</span><select value={columnIndex} onChange={(event) => setColumnIndex(Number(event.target.value))}>
                 {(importRows.columns.length ? importRows.columns : ["No columns found"]).map((label, index) => <option key={`${label}-${index}`} value={index}>{label}</option>)}</select></label>
               <label className="check-setting"><input type="checkbox" checked={hasHeader} onChange={(event) => setHasHeader(event.target.checked)} /><span>First row contains column headers</span></label>
-              <label className="check-setting"><input type="checkbox" checked={keepDuplicates} onChange={(event) => setKeepDuplicates(event.target.checked)} /><span>Keep duplicate names as separate entries</span></label>
               <div className="import-preview"><div className="preview-heading"><span>PREVIEW</span><strong>{importRows.names.length} names · {importRows.empty} blank rows · {importRows.missing} rows without a name</strong></div>
                 {importRows.names.length === 0 ? <p>No names found in the selected column.</p> : <div className="preview-names">{importRows.names.slice(0, 12).map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}{importRows.names.length > 12 && <span>+{importRows.names.length - 12} more</span>}</div>}
-                {importRows.duplicates > 0 && <p className="duplicate-note">{importRows.duplicates} repeated name{importRows.duplicates === 1 ? "" : "s"} detected. {keepDuplicates ? "They will be kept as separate participants." : "Repeated names will be skipped."}</p>}
+                {importDuplicateCount > 0 && <p className="duplicate-note">{importDuplicateCount} repeated name{importDuplicateCount === 1 ? "" : "s"} detected. Repeated names will be skipped.</p>}
               </div>
               <fieldset className="import-choice"><legend>Import action</legend>
                 <label><input type="radio" name="import-action" checked={importAction === "append"} onChange={() => setImportAction("append")} /> Add to current participants</label>
@@ -1132,19 +1228,42 @@ function App() {
           {dialog === "participants" && <div className="dialog-content">
             <div className="add-participant">
               <input value={newName} disabled={spinLocked} maxLength={100} placeholder="Add a participant name…" onChange={(event) => setNewName(event.target.value)}
-                onKeyDown={(event) => { if (event.key === "Enter") addParticipant(); }} />
-              <button className="button button-primary" onClick={addParticipant} disabled={spinLocked || !newName.trim()}><Plus size={16} /> Add</button>
+                onKeyDown={(event) => { if (event.key === "Enter") void addParticipant(); }} />
+              <button className="button button-primary" onClick={() => void addParticipant()} disabled={spinLocked || !newName.trim() || newNameAlreadyExists}><Plus size={16} /> Add</button>
             </div>
             <div className="list-toolbar"><span>{data.participants.length} active participant{data.participants.length === 1 ? "" : "s"}</span>
-              <button className="text-button" onClick={exportParticipants} disabled={!data.participants.length}><Download size={14} /> Export Excel</button></div>
+              <div className="participant-file-actions">
+                <label className={`button button-outline file-button${spinLocked ? " is-disabled" : ""}`}><Upload size={14} /> Import Excel
+                  <input type="file" accept=".xlsx,.xls,.csv" disabled={spinLocked} aria-label="Import participants from an Excel file" onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void loadWorkbook(file);
+                    event.target.value = "";
+                  }} />
+                </label>
+                <button className="text-button" onClick={() => void exportParticipants()} disabled={!data.participants.length}><Download size={14} /> Export</button>
+              </div>
+            </div>
+            <div className={`duplicate-check${duplicateParticipantIds.size ? " has-duplicates" : ""}`} role="status">
+              <span><ShieldCheck size={16} />{duplicateParticipantIds.size
+                ? `${duplicateParticipantIds.size} duplicate participant entr${duplicateParticipantIds.size === 1 ? "y" : "ies"} found`
+                : "No duplicate participant names detected"}</span>
+              <div>
+                <button className="text-button" type="button" onClick={verifyParticipantNames}><Check size={14} /> Verify names</button>
+                <button className="text-button" type="button" disabled={spinLocked || duplicateParticipantIds.size === 0}
+                  onClick={() => void removeDuplicateParticipantsFromList()}><Trash2 size={14} /> Remove duplicates</button>
+              </div>
+            </div>
             {data.participants.length === 0 ? <div className="empty-state"><FileSpreadsheet size={22} /><p>No participants yet. Add names or import a spreadsheet.</p></div> :
               <div className="participant-list">{data.participants.map((person, index) => <div className="participant-row" key={person.id}>
                 <span className="row-index">{String(index + 1).padStart(2, "0")}</span>
-                <input aria-label={`Participant ${index + 1} name`} value={person.name} disabled={spinLocked}
-                  onChange={(event) => updateParticipant(person.id, { name: event.target.value })} />
-                <button className="icon-button danger-icon" aria-label={`Remove ${person.name}`} disabled={spinLocked} onClick={() => removeParticipant(person.id)}><Trash2 size={15} /></button>
+                {isOperator ? <input aria-label={`Participant ${index + 1} name`} value={person.name} disabled={spinLocked}
+                  onChange={(event) => updateParticipant(person.id, { name: event.target.value })} /> :
+                  <span className="participant-row-name">{person.name}</span>}
+                <button className="icon-button danger-icon" aria-label={`Remove ${person.name}`} disabled={spinLocked} onClick={() => void removeParticipant(person.id)}><Trash2 size={15} /></button>
               </div>)}</div>}
-            <p className="dialog-note">Names remain unique by ID, even when duplicate names are allowed.</p>
+            <p className="dialog-note">{isOperator
+              ? "Names are identified by participant ID. Use the duplicate check to verify or clean repeated names."
+              : "Add participants by name or spreadsheet. New names are checked against the current list, ignoring letter case."}</p>
           </div>}
 
           {dialog === "import" && <div className="dialog-content">
@@ -1155,11 +1274,11 @@ function App() {
               <label className="setting-field"><span>Name column</span><select value={columnIndex} onChange={(event) => setColumnIndex(Number(event.target.value))}>
                 {(importRows.columns.length ? importRows.columns : ["No columns found"]).map((label, index) => <option key={`${label}-${index}`} value={index}>{label}</option>)}</select></label>
               <label className="check-setting"><input type="checkbox" checked={hasHeader} onChange={(event) => setHasHeader(event.target.checked)} /><span>First row contains column headers</span></label>
-              <label className="check-setting"><input type="checkbox" checked={keepDuplicates} onChange={(event) => setKeepDuplicates(event.target.checked)} /><span>Keep duplicate names as separate entries</span></label>
+              {isOperator && <label className="check-setting"><input type="checkbox" checked={keepDuplicates} onChange={(event) => setKeepDuplicates(event.target.checked)} /><span>Keep duplicate names as separate entries</span></label>}
               <div className="import-preview"><div className="preview-heading"><span>PREVIEW</span><strong>{importRows.names.length} names · {importRows.empty} blank rows · {importRows.missing} rows without a name</strong></div>
                 {importRows.names.length === 0 ? <p>No names found in the selected column.</p> :
                   <div className="preview-names">{importRows.names.slice(0, 12).map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}{importRows.names.length > 12 && <span>+{importRows.names.length - 12} more</span>}</div>}
-                {importRows.duplicates > 0 && <p className="duplicate-note">{importRows.duplicates} repeated name{importRows.duplicates === 1 ? "" : "s"} detected. {keepDuplicates ? "They will be kept as separate participants." : "Repeated names will be skipped."}</p>}
+                {importDuplicateCount > 0 && <p className="duplicate-note">{importDuplicateCount} repeated name{importDuplicateCount === 1 ? "" : "s"} detected. {isOperator && keepDuplicates ? "They will be kept as separate participants." : "Repeated names will be skipped."}</p>}
               </div>
               <fieldset className="import-choice"><legend>Import action</legend>
                 <label><input type="radio" name="import-action" checked={importAction === "append"} onChange={() => setImportAction("append")} /> Add to current participants</label>

@@ -265,6 +265,17 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
 .public-participant-actions > .public-detail-action { width: auto; min-width: 0; min-height: 30px; flex: 1 1 0; margin: 0; padding: 0 4px; border: 0; font-size: 9px; }
 .participant-file-actions { display: flex; align-items: center; gap: 14px; }
 .participant-file-actions .text-button { white-space: nowrap; }
+.participant-file-actions .button { min-height: 32px; padding: 0 9px; font-size: 10px; white-space: nowrap; }
+.duplicate-check { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 9px; padding: 9px 10px; border: 1px solid #39503e; border-radius: 6px; color: #b7d0b6; background: #182019; }
+.duplicate-check > span, .duplicate-check > div { display: flex; align-items: center; gap: 8px; }
+.duplicate-check > span { min-width: 0; font-size: 10px; }
+.duplicate-check > span svg { flex: 0 0 auto; color: #83b386; }
+.duplicate-check.has-duplicates { border-color: #725638; color: #e2c48f; background: #251f17; }
+.duplicate-check.has-duplicates > span svg { color: #d3aa63; }
+.duplicate-check > div { flex: 0 0 auto; }
+.duplicate-check .text-button { white-space: nowrap; }
+.duplicate-input-note { margin: 6px 0 -7px; color: #e2a18c; font-size: 10px; }
+.participant-row-name { min-width: 0; flex: 1; overflow-wrap: anywhere; color: #eee7de; font-size: 12px; }
 .participant-file-actions .file-button { position: relative; overflow: hidden; }
 .participant-file-actions .file-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .participant-file-actions .file-button.is-disabled { cursor: not-allowed; opacity: .48; }
@@ -312,6 +323,10 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
   .public-top-actions { justify-content: flex-end; }
   .public-top-actions .button { min-height: 34px; padding: 0 9px; font-size: 10px; }
   .list-toolbar { align-items: flex-start; gap: 8px; }
+  .duplicate-check { align-items: flex-start; flex-direction: column; }
+  .duplicate-check > div { flex-wrap: wrap; }
+  .duplicate-check > div { gap: 3px; }
+  .duplicate-check .text-button { padding: 3px; font-size: 9px; }
   .participant-file-actions { gap: 9px; }
   .participant-file-actions .text-button { font-size: 9px; }
   .public-heading { padding: 8px 0 5px; }

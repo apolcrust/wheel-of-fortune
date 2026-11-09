@@ -8,7 +8,7 @@ export interface WheelHandle {
 }
 
 const TAU = Math.PI * 2;
-const HIGHLIGHT_HALF_ANGLE = 0.15;
+const HIGHLIGHT_HALF_ANGLE = 0.7;
 const HIGHLIGHT_COUNT = 5;
 
 interface WheelProps {
@@ -144,15 +144,16 @@ function paint(
     context.restore();
 
     for (const highlight of highlights) {
-      const fontSize = Math.max(7, Math.min(9, size * 0.018));
+      const fontSize = Math.max(7, Math.min(13, size * 0.03));
       const lineHeight = fontSize * 1.05;
       context.save();
       context.translate(
-        center + radius * 0.81,
-        center + (highlight.index - (HIGHLIGHT_COUNT - 1) / 2) * lineHeight * 1.1,
+        center + Math.cos(highlight.offset) * radius * 0.77,
+        center + Math.sin(highlight.offset) * radius * 0.77,
       );
+      context.rotate(highlight.offset);
       const highlightedName = highlight.name;
-      const maxWidth = radius * 0.34;
+      const maxWidth = radius * 0.58;
       context.font = `700 ${fontSize}px Inter, sans-serif`;
       const lines: string[] = [];
       let line = "";
@@ -180,7 +181,7 @@ function paint(
         }
       }
       if (line) lines.push(line);
-      const maxLines = 1;
+      const maxLines = Math.max(1, Math.min(3, Math.floor((radius * 0.77 * highlightSlice * 0.84) / lineHeight)));
       const visibleLines = lines.slice(0, maxLines).map((text) => {
         let fitted = text;
         while (fitted.length > 1 && context.measureText(fitted).width > maxWidth) {

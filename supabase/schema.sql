@@ -291,12 +291,137 @@ begin
 end;
 $$;
 
+create or replace function public.manage_wheel_participants(
+  p_event_id uuid,
+  p_action text,
+  p_participant_id text,
+  p_name text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_event public.wheel_events%rowtype;
+  v_data jsonb;
+  v_participants jsonb;
+  v_seen text[] := array[]::text[];
+  v_item record;
+  v_name text;
+  v_override_removed boolean := false;
+begin
+  if p_action is null or p_action not in ('add', 'remove', 'deduplicate') then
+    raise exception 'Choose a valid participant management action.';
+  end if;
+  if p_action = 'add' and (
+    p_name is null
+    or pg_catalog.char_length(pg_catalog.btrim(p_name)) = 0
+    or pg_catalog.char_length(pg_catalog.btrim(p_name)) > 100
+  ) then
+    raise exception 'Participant names must contain 1 to 100 non-space characters.';
+  end if;
+  if p_action = 'remove' and (p_participant_id is null or p_participant_id = '') then
+    raise exception 'Choose a participant to remove.';
+  end if;
+
+  select * into v_event
+  from public.wheel_events
+  where id = p_event_id
+  for update;
+
+  if not found then
+    raise exception 'Wheel event not found.';
+  end if;
+  if v_event.is_spinning then
+    raise exception 'Wait until the current spin has finished before managing participants.';
+  end if;
+
+  v_data := v_event.data;
+  if pg_catalog.jsonb_typeof(v_data -> 'participants') <> 'array' then
+    raise exception 'The shared event participant list is invalid.';
+  end if;
+  v_participants := v_data -> 'participants';
+
+  if p_action = 'add' then
+    v_name := pg_catalog.btrim(p_name);
+    if exists (
+      select 1
+      from pg_catalog.jsonb_array_elements(v_participants) as participant(value)
+      where pg_catalog.lower(pg_catalog.btrim(participant.value ->> 'name')) = pg_catalog.lower(v_name)
+    ) then
+      raise exception 'That participant name is already on the wheel.';
+    end if;
+    v_participants := v_participants || pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object(
+        'id', pg_catalog.gen_random_uuid()::text,
+        'name', v_name,
+        'weight', 1
+      )
+    );
+  elsif p_action = 'remove' then
+    if not exists (
+      select 1
+      from pg_catalog.jsonb_array_elements(v_participants) as participant(value)
+      where participant.value ->> 'id' = p_participant_id
+    ) then
+      raise exception 'That participant is no longer on the wheel.';
+    end if;
+    select coalesce(
+      pg_catalog.jsonb_agg(participant.value order by participant.ordinality),
+      '[]'::jsonb
+    )
+    into v_participants
+    from pg_catalog.jsonb_array_elements(v_participants) with ordinality as participant(value, ordinality)
+    where participant.value ->> 'id' <> p_participant_id;
+    v_override_removed := v_data ->> 'overrideParticipantId' = p_participant_id;
+  else
+    v_participants := '[]'::jsonb;
+    for v_item in
+      select participant.value
+      from pg_catalog.jsonb_array_elements(v_data -> 'participants') with ordinality as participant(value, ordinality)
+      order by participant.ordinality
+    loop
+      v_name := pg_catalog.btrim(v_item.value ->> 'name');
+      if v_name is null or pg_catalog.char_length(v_name) = 0 then
+        raise exception 'The shared event contains an invalid participant name.';
+      end if;
+      if pg_catalog.lower(v_name) = any(v_seen) then
+        if v_item.value ->> 'id' = v_data ->> 'overrideParticipantId' then
+          v_override_removed := true;
+        end if;
+      else
+        v_seen := pg_catalog.array_append(v_seen, pg_catalog.lower(v_name));
+        v_participants := v_participants || pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_set(v_item.value, '{name}', pg_catalog.to_jsonb(v_name), true)
+        );
+      end if;
+    end loop;
+  end if;
+
+  v_data := pg_catalog.jsonb_set(v_data, '{participants}', v_participants, true);
+  if v_override_removed then
+    v_data := pg_catalog.jsonb_set(v_data, '{overrideParticipantId}', 'null'::jsonb, true);
+    v_data := pg_catalog.jsonb_set(v_data, '{overrideActivated}', 'false'::jsonb, true);
+  end if;
+
+  update public.wheel_events
+  set data = v_data,
+      updated_at = now()
+  where id = p_event_id;
+
+  return v_data;
+end;
+$$;
+
 revoke all on function public.begin_wheel_spin(uuid) from public;
 revoke all on function public.finish_wheel_spin(uuid, uuid) from public;
 revoke all on function public.import_wheel_participants(uuid, text[], text, boolean) from public;
+revoke all on function public.manage_wheel_participants(uuid, text, text, text) from public;
 grant execute on function public.begin_wheel_spin(uuid) to anon, authenticated;
 grant execute on function public.finish_wheel_spin(uuid, uuid) to anon, authenticated;
 grant execute on function public.import_wheel_participants(uuid, text[], text, boolean) to anon, authenticated;
+grant execute on function public.manage_wheel_participants(uuid, text, text, text) to anon, authenticated;
 
 do $$
 begin
