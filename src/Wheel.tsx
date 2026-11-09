@@ -95,6 +95,11 @@ function paint(
           pointerIndex,
           start,
           end,
+          name: (
+            index === Math.floor(HIGHLIGHT_COUNT / 2) && stoppedWinner
+              ? stoppedWinner
+              : participants[pointerIndex]
+          ).name.trim(),
         };
       },
     );
@@ -168,64 +173,124 @@ function paint(
 
     context.restore();
 
-    // Draw labels on top so they rotate with their underlying wheel slots.
-    participants.forEach((participant, index) => {
-      const start = -Math.PI / 2 + rotation + index * slice;
-      if (size * slice < 13) return;
-
-      context.save();
-      context.translate(center, center);
-      context.rotate(start + slice / 2);
-      context.textAlign = "right";
-      context.textBaseline = "middle";
-      context.fillStyle = settings.textColor;
-
-      const available = Math.max(5, Math.min(17, size * slice * 0.32));
-      context.font = `700 ${available}px Inter, sans-serif`;
-
-      let label = participant.name.trim();
-
-      while (
-        label.length > 3 &&
-        context.measureText(label).width > radius * 0.78
-      ) {
-        label = `${label.slice(0, -2)}…`;
-      }
-
-      context.fillText(label, radius * 0.83, 0, radius * 0.78);
-      context.restore();
-    });
-
-    if (stoppedWinner) {
-      const middleHighlight = highlights[Math.floor(HIGHLIGHT_COUNT / 2)];
-      const fontSize = Math.max(11, Math.min(20, size * 0.034));
+    // Keep a live participant label visible in each highlighted wedge.
+    for (const highlight of highlights) {
+      const fontSize = Math.max(10, Math.min(20, size * 0.03));
+      const lineHeight = fontSize * 1.12;
+      const labelRadius = radius * 0.67;
+      const maxWidth = Math.max(
+        fontSize * 2,
+        Math.min(
+          radius * 0.48,
+          2 * labelRadius * Math.sin(highlightSlice / 2) * 0.84,
+        ),
+      );
       context.save();
       context.beginPath();
       context.moveTo(center + focusInnerRadius, center);
       context.lineTo(
-        center + Math.cos(middleHighlight.start) * radius,
-        center + Math.sin(middleHighlight.start) * radius,
+        center + Math.cos(highlight.start) * radius,
+        center + Math.sin(highlight.start) * radius,
       );
-      context.arc(center, center, radius, middleHighlight.start, middleHighlight.end);
+      context.arc(center, center, radius, highlight.start, highlight.end);
       context.closePath();
       context.clip();
       context.translate(
-        center + Math.cos(middleHighlight.offset) * radius * 0.7,
-        center + Math.sin(middleHighlight.offset) * radius * 0.7,
+        center + Math.cos(highlight.offset) * labelRadius,
+        center + Math.sin(highlight.offset) * labelRadius,
       );
-      context.rotate(middleHighlight.offset);
+      context.rotate(highlight.offset);
       context.font = `700 ${fontSize}px Inter, sans-serif`;
       context.textAlign = "center";
       context.textBaseline = "middle";
-      context.fillStyle = "#fffdf2";
-      context.strokeStyle = "#3b1a00";
-      context.lineWidth = Math.max(2, fontSize * 0.16);
+
+      const lines: string[] = [];
+      let line = "";
+      const words = highlight.name.split(/\s+/).flatMap((word) => {
+        const chunks: string[] = [];
+        let chunk = "";
+        for (const character of word) {
+          if (chunk && context.measureText(chunk + character).width > maxWidth) {
+            chunks.push(chunk);
+            chunk = character;
+          } else {
+            chunk += character;
+          }
+        }
+        if (chunk) chunks.push(chunk);
+        return chunks;
+      });
+
+      for (const word of words) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && context.measureText(next).width > maxWidth) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = next;
+        }
+      }
+      if (line) lines.push(line);
+
+      const maxLines = Math.max(
+        1,
+        Math.min(5, Math.floor((radius * 0.52) / lineHeight)),
+      );
+      const visibleLines = lines.slice(0, maxLines);
+      if (lines.length > visibleLines.length && visibleLines.length > 0) {
+        const lastIndex = visibleLines.length - 1;
+        let last = visibleLines[lastIndex];
+        while (
+          last.length > 1 &&
+          context.measureText(`${last}…`).width > maxWidth
+        ) {
+          last = last.slice(0, -1);
+        }
+        visibleLines[lastIndex] = `${last}…`;
+      }
+
+      context.fillStyle = settings.textColor;
       context.shadowColor = "#1a0b00";
       context.shadowBlur = 4;
-      context.strokeText(stoppedWinner.name, 0, 0, radius * 0.48);
-      context.fillText(stoppedWinner.name, 0, 0, radius * 0.48);
+      context.lineJoin = "round";
+      context.strokeStyle = "#25170a";
+      context.lineWidth = Math.max(2, fontSize * 0.18);
+      visibleLines.forEach((text, index) => {
+        const y = (index - (visibleLines.length - 1) / 2) * lineHeight;
+        context.strokeText(text, 0, y, maxWidth);
+        context.fillText(text, 0, y, maxWidth);
+      });
       context.restore();
     }
+
+    // Draw the regular segment labels when there is room for them.
+    if (size * slice >= 40) {
+      participants.forEach((participant, index) => {
+        const start = -Math.PI / 2 + rotation + index * slice;
+        context.save();
+        context.translate(center, center);
+        context.rotate(start + slice / 2);
+        context.textAlign = "right";
+        context.textBaseline = "middle";
+        context.fillStyle = settings.textColor;
+
+        const available = Math.max(5, Math.min(17, size * slice * 0.32));
+        context.font = `700 ${available}px Inter, sans-serif`;
+
+        let label = participant.name.trim();
+
+        while (
+          label.length > 3 &&
+          context.measureText(label).width > radius * 0.78
+        ) {
+          label = `${label.slice(0, -2)}…`;
+        }
+
+        context.fillText(label, radius * 0.83, 0, radius * 0.78);
+        context.restore();
+      });
+    }
+
   }
 
   // Draw the outer metallic rim.
