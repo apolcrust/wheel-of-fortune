@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type * as XLSX from "xlsx";
 import {
-  Check, ChevronDown, CircleHelp, Clock3, Download, FileSpreadsheet, Fullscreen,
-  History, Keyboard, ListPlus, LoaderCircle, LockKeyhole, Plus, RotateCcw,
-  Settings2, ShieldCheck, Sparkles, Trash2, Trophy, Upload, Volume2, VolumeX, X,
+  Check, CircleHelp, Clock3, Download, FileSpreadsheet, Fullscreen, History, Keyboard,
+  ListPlus, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, Settings2, ShieldCheck,
+  Sparkles, Trash2, Trophy, Upload, Volume2, VolumeX, X,
 } from "lucide-react";
 import { pickRandomIndex, removeParticipantById, targetRotation } from "./engine";
 import { loadData, saveData, validateData } from "./storage";
@@ -101,6 +101,7 @@ function App() {
   const backupInput = useRef<HTMLInputElement>(null);
   const [capturingShortcut, setCapturingShortcut] = useState(false);
   const [customPalette, setCustomPalette] = useState("");
+  const [overrideSearch, setOverrideSearch] = useState("");
   const wheelRef = useRef<WheelHandle>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const toastSequence = useRef(0);
@@ -317,6 +318,13 @@ function App() {
 
   const eligibleOverride = !!data.overrideParticipantId &&
     data.participants.some((participant) => participant.id === data.overrideParticipantId);
+  const filteredOverrideParticipants = useMemo(() => {
+    const query = overrideSearch.trim().toLocaleLowerCase();
+    return data.participants
+      .map((participant, index) => ({ participant, index }))
+      .filter(({ participant }) => participant.name.toLocaleLowerCase().includes(query));
+  }, [data.participants, overrideSearch]);
+  const selectedOverrideParticipant = data.participants.find((person) => person.id === data.overrideParticipantId);
   const spinLocked = busy || remoteBusy;
   const activateOverride = useCallback(() => {
     if (!eligibleOverride || spinLocked) return;
@@ -936,25 +944,43 @@ function App() {
             <div className="card-overline"><span>DRAW CONTROL</span><span>OPERATOR</span></div>
             <div className="normal-draw-label"><span>NORMAL DRAW</span><strong>Random winner</strong></div>
             <div className={`override-status ${data.overrideActivated ? "is-armed" : ""}`}>
-              <Keyboard size={16} /><div><strong>{data.overrideActivated ? "One-time pick armed" : "Keyboard pick ready"}</strong>
+              <Keyboard size={16} /><div><strong>{data.overrideActivated ? "One-time pick armed" : "One-time pick ready"}</strong>
                 <span>{data.overrideParticipantId
-                  ? `${data.participants.find((person) => person.id === data.overrideParticipantId)?.name ?? "Unavailable"} · press ${keyLabel(data.settings.shortcut)} to arm`
-                  : "Select an eligible participant below"}</span></div>
+                  ? `${selectedOverrideParticipant?.name ?? "Unavailable"}${data.overrideActivated ? " · will be selected on the next spin" : " · activate below to use on the next spin"}`
+                  : "Search and select a participant below"}</span></div>
               {data.overrideActivated && <button className="text-button" disabled={spinLocked} onClick={() => {
                 setData((current) => ({ ...current, overrideActivated: false }));
                 notify("One-time pick cancelled.");
               }}>Cancel</button>}
             </div>
             <label className="field-label override-label" htmlFor="override-person">PREDETERMINED WINNER</label>
-            <div className="select-wrap"><select id="override-person" disabled={spinLocked} value={data.overrideParticipantId ?? ""}
-              onChange={(event) => setData((current) => ({
-                ...current,
-                overrideParticipantId: event.target.value || null,
-                overrideActivated: false,
-              }))}>
-              <option value="">No one selected</option>
-              {data.participants.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}
-            </select><ChevronDown size={16} /></div>
+            <label className="override-search">
+              <Search size={16} aria-hidden="true" />
+              <input id="override-person" type="search" value={overrideSearch} disabled={spinLocked || data.participants.length === 0}
+                onChange={(event) => setOverrideSearch(event.target.value)} placeholder="Search participants…" aria-label="Search participants for predetermined winner" />
+            </label>
+            {data.participants.length === 0 ? <p className="override-empty">Add participants before choosing a one-time pick.</p> :
+              filteredOverrideParticipants.length === 0 ? <p className="override-empty">No participants match “{overrideSearch.trim()}”.</p> :
+                <div className="override-participant-list" role="listbox" aria-label="Predetermined winner">
+                  {filteredOverrideParticipants.map(({ participant, index }) => {
+                    const selected = participant.id === data.overrideParticipantId;
+                    return <button className={`override-participant${selected ? " is-selected" : ""}`} type="button" role="option"
+                      aria-selected={selected} key={participant.id} disabled={spinLocked} onClick={() => setData((current) => ({
+                        ...current,
+                        overrideParticipantId: participant.id,
+                        overrideActivated: false,
+                      }))}>
+                      <span className="override-participant-index">{index + 1}</span>
+                      <span className="override-participant-name">{participant.name}</span>
+                      {participant.weight > 1 && <small>×{participant.weight}</small>}
+                      {selected && <Check size={16} aria-hidden="true" />}
+                    </button>;
+                  })}
+                </div>}
+            <button className="button button-primary arm-button" type="button" disabled={spinLocked || !eligibleOverride || data.overrideActivated}
+              onClick={activateOverride}>
+              <Check size={15} />{data.overrideActivated ? "One-time pick is armed" : "Activate one-time pick"}
+            </button>
             <div className="mode-note"><LockKeyhole size={13} /> Audience results identify operator-selected winners.</div>
           </div>
 
@@ -1072,7 +1098,7 @@ function App() {
             <label className="check-setting"><input type="checkbox" checked={data.settings.autoRemove} onChange={(event) => updateSettings({ autoRemove: event.target.checked })} /><span>Remove each winner from the active wheel</span></label>
             <label className="check-setting"><input type="checkbox" checked={data.settings.sound} onChange={(event) => updateSettings({ sound: event.target.checked })} /><span>Enable spin and winner sounds</span></label>
             <label className="check-setting"><input type="checkbox" checked={data.settings.confetti} onChange={(event) => updateSettings({ confetti: event.target.checked })} /><span>Celebrate winners with confetti</span></label>
-            <div className="shortcut-setting"><div><strong>One-time pick shortcut</strong><span>Press this key anywhere on the main page before spinning.</span></div>
+            <div className="shortcut-setting"><div><strong>Desktop shortcut (optional)</strong><span>You can also activate a one-time pick with the button on the draw controls.</span></div>
               <button className="button button-outline shortcut-button" onClick={() => setCapturingShortcut(true)}>
                 {capturingShortcut ? "Press a letter or number…" : <><Keyboard size={15} /> {keyLabel(data.settings.shortcut)}</>}
               </button></div>

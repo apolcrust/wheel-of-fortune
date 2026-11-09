@@ -75,7 +75,22 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
 .text-button { display: inline-flex; align-items: center; gap: 5px; padding: 4px; color: #d4ae6a; border: 0; background: transparent; font-size: 10px; font-weight: 600; cursor: pointer; }
 .text-button:hover:not(:disabled) { color: #f3d798; }
 .override-label { margin-top: 14px; }
-.arm-button { width: 100%; min-height: 35px; margin-top: 6px; font-size: 11px; }
+.override-search { height: 42px; display: flex; align-items: center; gap: 9px; padding: 0 11px; border: 1px solid #3c373e; border-radius: 6px; color: #948b91; background: #17151a; }
+.override-search:focus-within { border-color: #81705b; }
+.override-search input { width: 100%; min-width: 0; height: 100%; padding: 0; color: #eee7de; border: 0; outline: 0; background: transparent; font-size: 12px; }
+.override-search input::placeholder { color: #777078; }
+.override-search input:focus-visible { outline: 0; }
+.override-participant-list { max-height: 190px; overflow-y: auto; margin-top: 7px; border: 1px solid #342f35; border-radius: 6px; background: #17151a; overscroll-behavior: contain; }
+.override-participant { width: 100%; min-height: 42px; display: flex; align-items: center; gap: 9px; padding: 7px 10px; color: #d7d0cb; border: 0; border-bottom: 1px solid #2d292f; background: transparent; text-align: left; cursor: pointer; }
+.override-participant:last-child { border-bottom: 0; }
+.override-participant:hover:not(:disabled) { background: #242128; }
+.override-participant.is-selected { color: #f0d7a2; background: #2a241b; }
+.override-participant > svg { flex: 0 0 auto; color: #e0b968; }
+.override-participant-index { width: 22px; flex: 0 0 22px; color: #817982; font-size: 10px; text-align: center; }
+.override-participant-name { min-width: 0; overflow: hidden; flex: 1; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.override-participant small { color: #a59ba1; font-size: 10px; }
+.override-empty { margin: 8px 0; color: #90888d; font-size: 11px; }
+.arm-button { width: 100%; min-height: 42px; margin-top: 8px; font-size: 11px; }
 .mode-note { display: flex; align-items: center; gap: 5px; margin-top: 10px; color: #7e777f; font-size: 9px; }
 .stats-card { display: flex; align-items: center; justify-content: space-around; min-height: 91px; }
 .stat-block { display: flex; flex-direction: column; gap: 3px; }
