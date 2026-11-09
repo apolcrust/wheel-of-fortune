@@ -878,7 +878,6 @@ function App() {
               <div className="history-list">{filteredWinners.map((record) => <div className="history-row" key={`${record.spinNumber}-${record.participant.id}`}>
                 <span className="history-number">#{String(record.spinNumber).padStart(2, "0")}</span>
                 <div className="history-person"><strong>{record.participant.name}</strong><span>{new Date(record.timestamp).toLocaleString()}</span></div>
-                <span className={`mode-pill mode-${record.mode}`}>{record.mode === "controlled" ? "OPERATOR PICK" : `${record.mode.toUpperCase()} DRAW`}</span>
               </div>)}</div>}
             <div className="dialog-actions history-actions"><button className="button button-outline" onClick={() => setDialog(null)}>Close</button></div>
           </div>}
