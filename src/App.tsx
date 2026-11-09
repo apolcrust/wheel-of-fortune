@@ -99,7 +99,6 @@ function App() {
   const [newName, setNewName] = useState("");
   const [importBook, setImportBook] = useState<XLSX.WorkBook | null>(null);
   const [importFileName, setImportFileName] = useState("");
-  const [importPreviewOnly, setImportPreviewOnly] = useState(false);
   const [sheetRows, setSheetRows] = useState<Record<string, unknown[][]>>({});
   const [sheetName, setSheetName] = useState("");
   const [columnIndex, setColumnIndex] = useState(0);
@@ -107,10 +106,10 @@ function App() {
   const [importAction, setImportAction] = useState<"append" | "replace">("append");
   const [keepDuplicates, setKeepDuplicates] = useState(true);
   const backupInput = useRef<HTMLInputElement>(null);
-  const audienceExcelInput = useRef<HTMLInputElement>(null);
   const [capturingShortcut, setCapturingShortcut] = useState(false);
   const [customPalette, setCustomPalette] = useState("");
   const [overrideSearch, setOverrideSearch] = useState("");
+  const [importPending, setImportPending] = useState(false);
   const wheelRef = useRef<WheelHandle>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const toastSequence = useRef(0);
@@ -378,7 +377,7 @@ function App() {
       .filter(({ participant }) => participant.name.toLocaleLowerCase().includes(query));
   }, [data.participants, overrideSearch]);
   const selectedOverrideParticipant = data.participants.find((person) => person.id === data.overrideParticipantId);
-  const spinLocked = busy || remoteBusy;
+  const spinLocked = busy || remoteBusy || importPending;
   const activateOverride = useCallback(() => {
     if (!eligibleOverride || spinLocked) return;
     setData((current) => ({ ...current, overrideActivated: true }));
@@ -513,7 +512,7 @@ function App() {
     }));
   };
 
-  const loadWorkbook = async (file: File, previewOnly = false) => {
+  const loadWorkbook = async (file: File) => {
     try {
       const XLSX = await import("xlsx");
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
@@ -524,7 +523,6 @@ function App() {
       ]));
       setImportBook(workbook);
       setImportFileName(file.name);
-      setImportPreviewOnly(previewOnly);
       setSheetRows(rows);
       setSheetName(workbook.SheetNames[0]);
       setColumnIndex(0);
@@ -558,26 +556,8 @@ function App() {
     return { columns, names, empty: dataRows.length - nonEmptyRows.length, missing: nonEmptyRows.length - names.length, duplicates };
   }, [sheetRows, sheetName, columnIndex, hasHeader]);
 
-  const importComparison = useMemo(() => {
-    const workbookNames = new Set(importRows.names.map((name) => name.trim().toLocaleLowerCase()));
-    const eventNames = new Set(data.participants.map((participant) => participant.name.trim().toLocaleLowerCase()));
-    const matching = [...workbookNames].filter((name) => eventNames.has(name)).length;
-    return {
-      matching,
-      workbookOnly: [...workbookNames].filter((name) => !eventNames.has(name)).length,
-      eventOnly: [...eventNames].filter((name) => !workbookNames.has(name)).length,
-    };
-  }, [data.participants, importRows.names]);
-
-  const confirmImport = () => {
+  const confirmImport = async () => {
     if (spinLocked) return;
-    if (importPreviewOnly) {
-      setDialog(null);
-      setImportBook(null);
-      setImportFileName("");
-      setImportPreviewOnly(false);
-      return;
-    }
     let names = importRows.names;
     if (!keepDuplicates) {
       const seen = new Set(importAction === "append"
@@ -591,12 +571,33 @@ function App() {
       });
     }
     const incoming = names.map((name) => makeParticipant(name));
-    setData((current) => ({
-      ...current,
-      participants: importAction === "replace" ? incoming : [...current.participants, ...incoming],
-      overrideParticipantId: importAction === "replace" ? null : current.overrideParticipantId,
-      overrideActivated: importAction === "replace" ? false : current.overrideActivated,
-    }));
+    setImportPending(true);
+    try {
+      if (supabase && eventId) {
+        const { data: result, error } = await supabase.rpc("import_wheel_participants", {
+          p_event_id: eventId,
+          p_names: names,
+          p_action: importAction,
+          p_keep_duplicates: keepDuplicates,
+        });
+        if (error) throw error;
+        const updated = validateData(result, "shared event");
+        receivedDataRef.current = updated;
+        setData(updated);
+      } else {
+        setData((current) => ({
+          ...current,
+          participants: importAction === "replace" ? incoming : [...current.participants, ...incoming],
+          overrideParticipantId: importAction === "replace" ? null : current.overrideParticipantId,
+          overrideActivated: importAction === "replace" ? false : current.overrideActivated,
+        }));
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The spreadsheet participants could not be imported.", "error");
+      return;
+    } finally {
+      setImportPending(false);
+    }
     const skipped = importRows.names.length - names.length;
     notify(`Imported ${incoming.length} participant${incoming.length === 1 ? "" : "s"}${skipped ? `; skipped ${skipped} duplicate name${skipped === 1 ? "" : "s"}` : ""}.`);
     setDialog(null);
@@ -871,12 +872,12 @@ function App() {
               </li>)}</ul>}
             <div className="public-participant-actions">
               <label className={`button button-quiet file-button public-detail-action${spinLocked ? " is-disabled" : ""}`}>
-                <FileSpreadsheet size={15} /> Verify Excel list
-                <input ref={audienceExcelInput} type="file" accept=".xlsx,.xls,.csv" disabled={spinLocked}
-                  aria-label="Verify participant list using an Excel file"
+                <Upload size={15} /> Import Excel
+                <input type="file" accept=".xlsx,.xls,.csv" disabled={spinLocked}
+                  aria-label="Import participants from an Excel file"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
-                    if (file) void loadWorkbook(file, true);
+                    if (file) void loadWorkbook(file);
                     event.target.value = "";
                   }} />
               </label>
@@ -901,7 +902,7 @@ function App() {
       {dialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
         <section className={`dialog ${dialog === "participants" || dialog === "history" ? "dialog-wide" : ""}`} role="dialog" aria-modal="true">
           <header className="dialog-header"><div><span className="eyebrow">FORTUNE / WHEEL</span>
-            <h2>{dialog === "participants" ? "Participants" : dialog === "import" ? (importPreviewOnly ? "Verify participant list" : "Import spreadsheet") : dialog === "settings" ? "Wheel settings" : "Winner history"}</h2></div>
+            <h2>{dialog === "participants" ? "Participants" : dialog === "import" ? "Import spreadsheet" : dialog === "settings" ? "Wheel settings" : "Winner history"}</h2></div>
             <button className="icon-button" aria-label="Close dialog" onClick={() => setDialog(null)}><X size={18} /></button>
           </header>
           {dialog === "participants" && <div className="dialog-content">
@@ -939,27 +940,17 @@ function App() {
               <label className="setting-field"><span>Name column</span><select value={columnIndex} onChange={(event) => setColumnIndex(Number(event.target.value))}>
                 {(importRows.columns.length ? importRows.columns : ["No columns found"]).map((label, index) => <option key={`${label}-${index}`} value={index}>{label}</option>)}</select></label>
               <label className="check-setting"><input type="checkbox" checked={hasHeader} onChange={(event) => setHasHeader(event.target.checked)} /><span>First row contains column headers</span></label>
-              {!importPreviewOnly && <label className="check-setting"><input type="checkbox" checked={keepDuplicates} onChange={(event) => setKeepDuplicates(event.target.checked)} /><span>Keep duplicate names as separate entries</span></label>}
+              <label className="check-setting"><input type="checkbox" checked={keepDuplicates} onChange={(event) => setKeepDuplicates(event.target.checked)} /><span>Keep duplicate names as separate entries</span></label>
               <div className="import-preview"><div className="preview-heading"><span>PREVIEW</span><strong>{importRows.names.length} names · {importRows.empty} blank rows · {importRows.missing} rows without a name</strong></div>
                 {importRows.names.length === 0 ? <p>No names found in the selected column.</p> : <div className="preview-names">{importRows.names.slice(0, 12).map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}{importRows.names.length > 12 && <span>+{importRows.names.length - 12} more</span>}</div>}
                 {importRows.duplicates > 0 && <p className="duplicate-note">{importRows.duplicates} repeated name{importRows.duplicates === 1 ? "" : "s"} detected. {keepDuplicates ? "They will be kept as separate participants." : "Repeated names will be skipped."}</p>}
               </div>
-              {importPreviewOnly ? <>
-                <p className="audience-import-note">Read-only verification: this file will not change the live participant list or affect the draw.</p>
-                <div className="audience-import-comparison">
-                  <span><strong>{importComparison.matching}</strong> names match the live list</span>
-                  <span><strong>{importComparison.workbookOnly}</strong> only in this file</span>
-                  <span><strong>{importComparison.eventOnly}</strong> only in the live list</span>
-                </div>
-                <div className="dialog-actions"><button className="button button-primary" onClick={confirmImport}>Done</button></div>
-              </> : <>
-                <fieldset className="import-choice"><legend>Import action</legend>
-                  <label><input type="radio" name="audience-import-action" checked={importAction === "append"} onChange={() => setImportAction("append")} /> Add to current participants</label>
-                  <label><input type="radio" name="audience-import-action" checked={importAction === "replace"} onChange={() => setImportAction("replace")} /> Replace current participants</label>
-                </fieldset>
-                <div className="dialog-actions"><button className="button button-outline" onClick={() => setDialog(null)}>Cancel</button>
-                  <button className="button button-primary" onClick={confirmImport} disabled={spinLocked || !importRows.names.length}><Upload size={15} /> Import {importRows.names.length} names</button></div>
-              </>}
+              <fieldset className="import-choice"><legend>Import action</legend>
+                <label><input type="radio" name="import-action" checked={importAction === "append"} onChange={() => setImportAction("append")} /> Add to current participants</label>
+                <label><input type="radio" name="import-action" checked={importAction === "replace"} onChange={() => setImportAction("replace")} /> Replace current participants</label>
+              </fieldset>
+              <div className="dialog-actions"><button className="button button-outline" onClick={() => setDialog(null)}>Cancel</button>
+                <button className="button button-primary" onClick={() => void confirmImport()} disabled={spinLocked || !importRows.names.length}><Upload size={15} /> Import {importRows.names.length} names</button></div>
             </>}
           </div>}
           {dialog === "settings" && <div className="dialog-content settings-content">

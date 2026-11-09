@@ -80,35 +80,72 @@ function paint(
 
     const hubRadius = Math.max(34, size * 0.11);
     const focusInnerRadius = hubRadius + 5;
-    for (const offset of HIGHLIGHT_OFFSETS) {
+    const highlights = HIGHLIGHT_OFFSETS.map((offset) => {
       const pointerIndex = segmentIndexAtPointer(rotation, participants.length, POINTER_ANGLE + offset);
-      context.save();
-      context.translate(center, center);
-      context.rotate(offset);
-      context.beginPath();
-      context.moveTo(focusInnerRadius, 0);
-      context.lineTo(radius * Math.cos(-HIGHLIGHT_HALF_ANGLE), radius * Math.sin(-HIGHLIGHT_HALF_ANGLE));
-      context.arc(0, 0, radius, -HIGHLIGHT_HALF_ANGLE, HIGHLIGHT_HALF_ANGLE);
-      context.closePath();
-      context.shadowColor = "#000";
-      context.shadowBlur = Math.max(7, size * 0.03);
-      context.shadowOffsetY = Math.max(2, size * 0.008);
-      context.fillStyle = settings.colors[pointerIndex % settings.colors.length] ?? "#8d382e";
-      context.fill();
-      context.shadowColor = "#ffe08a";
-      context.shadowBlur = Math.max(10, size * 0.03);
-      context.shadowOffsetY = 0;
-      context.strokeStyle = "#ffe08a";
-      context.lineWidth = Math.max(2, size * 0.007);
-      context.stroke();
-      context.shadowBlur = 0;
-      context.strokeStyle = "#fff4d2";
-      context.lineWidth = Math.max(0.8, size * 0.002);
-      context.stroke();
+      return {
+        offset,
+        pointerIndex,
+        start: offset - HIGHLIGHT_HALF_ANGLE,
+        end: offset + HIGHLIGHT_HALF_ANGLE,
+        color: settings.colors[pointerIndex % settings.colors.length] ?? "#8d382e",
+        name: (offset === 0 && stoppedWinner ? stoppedWinner : participants[pointerIndex]).name.trim(),
+      };
+    });
 
-      const highlightedName = (offset === 0 && stoppedWinner
-        ? stoppedWinner
-        : participants[pointerIndex]).name.trim();
+    context.save();
+    for (const highlight of highlights) {
+      context.beginPath();
+      context.moveTo(center + focusInnerRadius, center);
+      context.lineTo(
+        center + Math.cos(highlight.start) * radius,
+        center + Math.sin(highlight.start) * radius,
+      );
+      context.arc(center, center, radius, highlight.start, highlight.end);
+      context.closePath();
+      context.fillStyle = highlight.color;
+      context.fill();
+    }
+
+    const fanStart = highlights[0].start;
+    const fanEnd = highlights[highlights.length - 1].end;
+    context.beginPath();
+    context.moveTo(center + focusInnerRadius, center);
+    context.lineTo(center + Math.cos(fanStart) * radius, center + Math.sin(fanStart) * radius);
+    context.arc(center, center, radius, fanStart, fanEnd);
+    context.closePath();
+    context.shadowColor = "#000";
+    context.shadowBlur = Math.max(7, size * 0.03);
+    context.shadowOffsetY = Math.max(2, size * 0.008);
+    context.strokeStyle = "#ffe08a";
+    context.lineWidth = Math.max(2, size * 0.007);
+    context.stroke();
+    context.shadowBlur = 0;
+    context.shadowOffsetY = 0;
+    context.strokeStyle = "#fff4d2";
+    context.lineWidth = Math.max(0.8, size * 0.002);
+    context.stroke();
+
+    context.beginPath();
+    for (const highlight of highlights.slice(1)) {
+      context.moveTo(center + focusInnerRadius, center);
+      context.lineTo(
+        center + Math.cos(highlight.start) * radius,
+        center + Math.sin(highlight.start) * radius,
+      );
+    }
+    context.strokeStyle = "#f4d796";
+    context.lineWidth = Math.max(0.7, size * 0.002);
+    context.stroke();
+    context.restore();
+
+    for (const highlight of highlights) {
+      context.save();
+      context.translate(
+        center + Math.cos(highlight.offset) * radius * 0.68,
+        center + Math.sin(highlight.offset) * radius * 0.68,
+      );
+      context.rotate(highlight.offset);
+      const highlightedName = highlight.name;
       const fontSize = Math.max(8, Math.min(13, size * 0.027));
       const maxWidth = radius * 0.46;
       const lineHeight = fontSize * 1.05;
@@ -160,7 +197,7 @@ function paint(
       context.textAlign = "center";
       context.textBaseline = "middle";
       visibleLines.forEach((text, index) => {
-        context.fillText(text, radius * 0.68, (index - (visibleLines.length - 1) / 2) * lineHeight, maxWidth);
+        context.fillText(text, 0, (index - (visibleLines.length - 1) / 2) * lineHeight, maxWidth);
       });
       context.restore();
     }

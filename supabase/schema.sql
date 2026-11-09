@@ -189,10 +189,114 @@ begin
 end;
 $$;
 
+create or replace function public.import_wheel_participants(
+  p_event_id uuid,
+  p_names text[],
+  p_action text,
+  p_keep_duplicates boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_event public.wheel_events%rowtype;
+  v_data jsonb;
+  v_participants jsonb;
+  v_seen text[] := array[]::text[];
+  v_item record;
+  v_name text;
+  v_participant jsonb;
+begin
+  if p_action is null or p_action not in ('append', 'replace') then
+    raise exception 'Choose whether to add to or replace the participant list.';
+  end if;
+  if p_keep_duplicates is null then
+    raise exception 'The duplicate-name setting is required.';
+  end if;
+  if p_names is null or pg_catalog.cardinality(p_names) = 0 or pg_catalog.cardinality(p_names) > 10000 then
+    raise exception 'Import between 1 and 10000 participant names.';
+  end if;
+  if exists (
+    select 1
+    from pg_catalog.unnest(p_names) as input(name)
+    where input.name is null
+      or pg_catalog.char_length(pg_catalog.btrim(input.name)) = 0
+      or pg_catalog.char_length(pg_catalog.btrim(input.name)) > 100
+  ) then
+    raise exception 'Participant names must contain 1 to 100 non-space characters.';
+  end if;
+
+  select * into v_event
+  from public.wheel_events
+  where id = p_event_id
+  for update;
+
+  if not found then
+    raise exception 'Wheel event not found.';
+  end if;
+  if v_event.is_spinning then
+    raise exception 'Wait until the current spin has finished before importing participants.';
+  end if;
+
+  v_data := v_event.data;
+  if pg_catalog.jsonb_typeof(v_data -> 'participants') <> 'array' then
+    raise exception 'The shared event participant list is invalid.';
+  end if;
+
+  if p_action = 'append' then
+    v_participants := v_data -> 'participants';
+    select coalesce(
+      pg_catalog.array_agg(pg_catalog.lower(p.value ->> 'name')),
+      array[]::text[]
+    )
+    into v_seen
+    from pg_catalog.jsonb_array_elements(v_participants) as p(value);
+  else
+    v_participants := '[]'::jsonb;
+  end if;
+
+  for v_item in
+    select pg_catalog.btrim(input.name) as name
+    from pg_catalog.unnest(p_names) with ordinality as input(name, ordinal)
+    order by input.ordinal
+  loop
+    v_name := v_item.name;
+    if p_keep_duplicates or not (pg_catalog.lower(v_name) = any(v_seen)) then
+      v_participant := pg_catalog.jsonb_build_object(
+        'id', pg_catalog.gen_random_uuid()::text,
+        'name', v_name,
+        'weight', 1
+      );
+      v_participants := v_participants || pg_catalog.jsonb_build_array(v_participant);
+      if not p_keep_duplicates then
+        v_seen := pg_catalog.array_append(v_seen, pg_catalog.lower(v_name));
+      end if;
+    end if;
+  end loop;
+
+  v_data := pg_catalog.jsonb_set(v_data, '{participants}', v_participants, true);
+  if p_action = 'replace' then
+    v_data := pg_catalog.jsonb_set(v_data, '{overrideParticipantId}', 'null'::jsonb, true);
+    v_data := pg_catalog.jsonb_set(v_data, '{overrideActivated}', 'false'::jsonb, true);
+  end if;
+
+  update public.wheel_events
+  set data = v_data,
+      updated_at = now()
+  where id = p_event_id;
+
+  return v_data;
+end;
+$$;
+
 revoke all on function public.begin_wheel_spin(uuid) from public;
 revoke all on function public.finish_wheel_spin(uuid, uuid) from public;
+revoke all on function public.import_wheel_participants(uuid, text[], text, boolean) from public;
 grant execute on function public.begin_wheel_spin(uuid) to anon, authenticated;
 grant execute on function public.finish_wheel_spin(uuid, uuid) to anon, authenticated;
+grant execute on function public.import_wheel_participants(uuid, text[], text, boolean) to anon, authenticated;
 
 do $$
 begin
