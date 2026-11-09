@@ -60,10 +60,8 @@ function WinnerAnnouncement({ winner, confetti, autoRemove, onClose }: {
       <button className="modal-close" aria-label="Close winner announcement" onClick={onClose}><X size={19} /></button>
       <div className="winner-icon"><Trophy size={28} /></div><div className="eyebrow">THE WHEEL HAS SPOKEN</div>
       <h2 id="winner-heading">Congratulations!</h2><p className="winner-name">{winner.participant.name}</p>
-      <span className={`mode-pill mode-${winner.mode}`}>
-        {winner.mode === "controlled" ? "OPERATOR PICK" : `${winner.mode.toUpperCase()} DRAW`}
-      </span>
-      {autoRemove && <p className="winner-removed">Removed from the active wheel</p>}
+
+      {autoRemove && <p className="winner-removed"> Has been removed from the wheel</p>}
       <button className="button button-primary winner-continue" onClick={onClose}><Check size={16} /> Continue</button>
     </section>
   </div>;
@@ -794,7 +792,7 @@ function App() {
             {data.winners.length === 0 ? <p className="public-empty-copy">Winners will appear here after the first spin.</p> :
               <ul className="public-winner-list">{data.winners.slice(0, 5).map((winner) => <li key={`${winner.spinNumber}-${winner.participant.id}`}>
                 <div><strong>{winner.participant.name}</strong><small>#{String(winner.spinNumber).padStart(2, "0")} · {new Date(winner.timestamp).toLocaleString()}</small></div>
-                <span className={`mode-pill mode-${winner.mode}`}>{winner.mode === "controlled" ? "OPERATOR PICK" : `${winner.mode.toUpperCase()} DRAW`}</span>
+                
               </li>)}</ul>}
             {data.winners.length > 5 && <button className="button button-quiet public-detail-action" onClick={() => setDialog("history")}><History size={15} /> View all winners</button>}
           </section>
