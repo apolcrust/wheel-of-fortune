@@ -8,8 +8,8 @@ export interface WheelHandle {
 }
 
 const TAU = Math.PI * 2;
-const HIGHLIGHT_OFFSETS = [-0.6, -0.3, 0, 0.3, 0.6];
 const HIGHLIGHT_HALF_ANGLE = 0.15;
+const HIGHLIGHT_COUNT = 5;
 
 interface WheelProps {
   participants: Participant[];
@@ -80,13 +80,18 @@ function paint(
 
     const hubRadius = Math.max(34, size * 0.11);
     const focusInnerRadius = hubRadius + 5;
-    const highlights = HIGHLIGHT_OFFSETS.map((offset) => {
+    const highlightSlice = (HIGHLIGHT_HALF_ANGLE * 2) / HIGHLIGHT_COUNT;
+    const highlights = Array.from({ length: HIGHLIGHT_COUNT }, (_, index) => {
+      const start = -HIGHLIGHT_HALF_ANGLE + index * highlightSlice;
+      const end = start + highlightSlice;
+      const offset = (start + end) / 2;
       const pointerIndex = segmentIndexAtPointer(rotation, participants.length, POINTER_ANGLE + offset);
       return {
+        index,
         offset,
         pointerIndex,
-        start: offset - HIGHLIGHT_HALF_ANGLE,
-        end: offset + HIGHLIGHT_HALF_ANGLE,
+        start,
+        end,
         color: settings.colors[pointerIndex % settings.colors.length] ?? "#8d382e",
         name: (offset === 0 && stoppedWinner ? stoppedWinner : participants[pointerIndex]).name.trim(),
       };
@@ -139,16 +144,15 @@ function paint(
     context.restore();
 
     for (const highlight of highlights) {
+      const fontSize = Math.max(7, Math.min(9, size * 0.018));
+      const lineHeight = fontSize * 1.05;
       context.save();
       context.translate(
-        center + Math.cos(highlight.offset) * radius * 0.68,
-        center + Math.sin(highlight.offset) * radius * 0.68,
+        center + radius * 0.81,
+        center + (highlight.index - (HIGHLIGHT_COUNT - 1) / 2) * lineHeight * 1.1,
       );
-      context.rotate(highlight.offset);
       const highlightedName = highlight.name;
-      const fontSize = Math.max(8, Math.min(13, size * 0.027));
-      const maxWidth = radius * 0.46;
-      const lineHeight = fontSize * 1.05;
+      const maxWidth = radius * 0.34;
       context.font = `700 ${fontSize}px Inter, sans-serif`;
       const lines: string[] = [];
       let line = "";
@@ -176,7 +180,7 @@ function paint(
         }
       }
       if (line) lines.push(line);
-      const maxLines = size < 260 ? 1 : 2;
+      const maxLines = 1;
       const visibleLines = lines.slice(0, maxLines).map((text) => {
         let fitted = text;
         while (fitted.length > 1 && context.measureText(fitted).width > maxWidth) {
