@@ -4,6 +4,8 @@ const DATABASE = "fortune-wheel";
 const STORE = "session";
 const KEY = "current";
 
+export type DataSource = "backup file" | "saved browser session" | "shared event";
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE, 1);
@@ -20,7 +22,7 @@ export async function loadData(): Promise<AppData> {
   try {
     return await new Promise((resolve, reject) => {
       const request = db.transaction(STORE, "readonly").objectStore(STORE).get(KEY);
-      request.onsuccess = () => resolve(request.result ? validateData(request.result) : structuredClone(DEFAULT_DATA));
+      request.onsuccess = () => resolve(request.result ? validateData(request.result, "saved browser session") : structuredClone(DEFAULT_DATA));
       request.onerror = () => reject(request.error ?? new Error("Could not load saved data."));
     });
   } finally {
@@ -43,11 +45,13 @@ export async function saveData(data: AppData): Promise<void> {
   }
 }
 
-export function validateData(value: unknown): AppData {
-  if (!value || typeof value !== "object") throw new Error("The backup file does not contain valid session data.");
+export function validateData(value: unknown, source: DataSource = "backup file"): AppData {
+  const sourceLabel = source === "saved browser session" ? "The saved browser session" :
+    source === "shared event" ? "The shared event" : "The backup file";
+  if (!value || typeof value !== "object") throw new Error(`${sourceLabel} does not contain valid session data.`);
   const candidate = value as Partial<AppData>;
   if (!Array.isArray(candidate.participants) || !Array.isArray(candidate.winners)) {
-    throw new Error("The backup must include participant and winner lists.");
+    throw new Error(`${sourceLabel} must include participant and winner lists.`);
   }
   const validParticipant = (participant: unknown) =>
     !!participant && typeof participant === "object" &&
@@ -56,7 +60,7 @@ export function validateData(value: unknown): AppData {
     Number.isFinite((participant as AppData["participants"][number]).weight) &&
     (participant as AppData["participants"][number]).weight > 0;
   if (!candidate.participants.every(validParticipant)) {
-    throw new Error("The backup contains an invalid participant.");
+    throw new Error(`${sourceLabel} contains an invalid participant.`);
   }
   if (!candidate.winners.every((winner) => {
     if (!winner || typeof winner !== "object") return false;
@@ -64,7 +68,7 @@ export function validateData(value: unknown): AppData {
     return validParticipant(entry.participant) && Number.isInteger(entry.spinNumber) &&
       typeof entry.timestamp === "string" && ["random", "weighted", "controlled"].includes(entry.mode);
   })) {
-    throw new Error("The backup contains an invalid winner record.");
+    throw new Error(`${sourceLabel} contains an invalid winner record.`);
   }
   const settings = { ...DEFAULT_DATA.settings, ...(candidate.settings ?? {}) };
   if (typeof settings.title !== "string" || !Number.isFinite(settings.duration) ||
@@ -77,13 +81,13 @@ export function validateData(value: unknown): AppData {
         /^#[0-9a-f]{6}$/i.test(settings[key as keyof typeof settings] as string)) ||
       !["autoRemove", "sound", "confetti"].every((key) =>
         typeof settings[key as keyof typeof settings] === "boolean")) {
-    throw new Error("The backup contains invalid wheel settings.");
+    throw new Error(`${sourceLabel} contains invalid wheel settings.`);
   }
   const ids = new Set(candidate.participants.map((participant) => participant.id));
-  if (ids.size !== candidate.participants.length) throw new Error("The backup contains duplicate participant IDs.");
+  if (ids.size !== candidate.participants.length) throw new Error(`${sourceLabel} contains duplicate participant IDs.`);
   const overrideId = candidate.overrideParticipantId;
   if (typeof overrideId === "string" && !ids.has(overrideId)) {
-    throw new Error("The backup one-time pick is not an active participant.");
+    throw new Error(`${sourceLabel} has a one-time pick that is not an active participant.`);
   }
   return {
     participants: candidate.participants,

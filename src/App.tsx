@@ -180,7 +180,7 @@ function App() {
             .maybeSingle();
           if (error) throw error;
           if (!row) throw new Error("This shared wheel event was not found or is no longer available.");
-          const remoteData = validateData(row.data);
+          const remoteData = validateData(row.data, "shared event");
           if (active) {
             receivedDataRef.current = remoteData;
             setData(remoteData);
@@ -230,7 +230,7 @@ function App() {
         if (payload.eventType === "DELETE") return;
         const row = payload.new as { owner_id: string; data: unknown; is_spinning: boolean };
         try {
-          const remoteData = validateData(row.data);
+          const remoteData = validateData(row.data, "shared event");
           receivedDataRef.current = remoteData;
           setData((current) => JSON.stringify(current) === JSON.stringify(remoteData) ? current : remoteData);
           setEventOwnerId(row.owner_id);
@@ -392,7 +392,7 @@ function App() {
           p_spin_id: spinId,
         });
         if (error) throw error;
-        const completed = validateData(completedData);
+        const completed = validateData(completedData, "shared event");
         receivedDataRef.current = completed;
         setData(completed);
         setLastWinner(completed.winners[0] ?? null);
@@ -728,8 +728,8 @@ function App() {
   }
 
   if (storageError && !ready) {
-    return <main className="fatal-screen"><ShieldCheck size={42} /><h1>Local storage unavailable</h1>
-      <p>{storageError} This browser needs IndexedDB enabled for the app to save its session.</p>
+    return <main className="fatal-screen"><ShieldCheck size={42} /><h1>Could not open saved session</h1>
+      <p>{storageError} The saved session may be invalid, or IndexedDB may be unavailable in this browser.</p>
       <button className="button button-primary" onClick={() => window.location.reload()}>Try again</button>
     </main>;
   }
