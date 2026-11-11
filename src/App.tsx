@@ -1024,7 +1024,7 @@ function App() {
           <span>LUCKY<span className="brand-muted"> / DRAW</span></span>
         </div>
         <div className="public-top-actions">
-          {!supabase && <button className="button button-outline" disabled={spinLocked} onClick={() => setDialog("settings")}><Settings2 size={16} /> Settings</button>}
+          <button className="button button-outline" disabled={spinLocked} onClick={() => setDialog("settings")}><Settings2 size={16} /> Settings</button>
           <button className="icon-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => void toggleFullscreen()}>
             <Fullscreen size={18} />
           </button>
