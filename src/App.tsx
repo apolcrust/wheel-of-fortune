@@ -15,6 +15,7 @@ import { useOperatorShortcut } from "./operatorShortcut";
 import { supabase, supabaseConfigurationError } from "./supabaseClient";
 import { findDuplicateParticipantIds, normalizeParticipantName, removeDuplicateParticipants } from "./participants";
 import type { Session } from "@supabase/supabase-js";
+import spinMusicUrl from "./assets/mangarap.mp3?url";
 
 type Dialog = "participants" | "import" | "settings" | "history" | null;
 type Toast = { id: number; message: string; tone: "success" | "error" };
@@ -66,15 +67,12 @@ function WinnerAnnouncement({ winner, confetti, autoRemove, onClose }: {
   autoRemove: boolean;
   onClose: () => void;
 }) {
-  return <div className="modal-backdrop winner-backdrop" role="presentation" onMouseDown={(event) => {
-    if (event.target === event.currentTarget) onClose();
-  }}>
+  return <div className="modal-backdrop winner-backdrop" role="presentation">
     {confetti && <div className="confetti" aria-hidden="true">{Array.from({ length: 44 }, (_, index) =>
       <i key={index} style={{ left: `${(index * 37) % 100}%`, backgroundColor: `hsl(${(index * 47) % 360} 65% 65%)`,
         animationDuration: `${2.4 + (index % 10) * 0.17}s`, animationDelay: `${-(index % 18) * 0.23}s`,
         transform: `rotate(${index * 31}deg)` }} />)}</div>}
     <section className="winner-modal" role="dialog" aria-modal="true" aria-labelledby="winner-heading">
-      <button className="modal-close" aria-label="Close winner announcement" onClick={onClose}><X size={19} /></button>
       <div className="winner-icon"><Trophy size={28} /></div><div className="eyebrow">THE WHEEL HAS SPOKEN</div>
       <h2 id="winner-heading">Congratulations!</h2><p className="winner-name">{winner.participant.name}</p>
 
@@ -123,6 +121,7 @@ function App() {
   const [overrideSearch, setOverrideSearch] = useState("");
   const [importPending, setImportPending] = useState(false);
   const wheelRef = useRef<WheelHandle>(null);
+  const spinMusicRef = useRef<HTMLAudioElement | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const toastSequence = useRef(0);
   const channelRef = useRef<BroadcastChannel | null>(null);
@@ -137,6 +136,48 @@ function App() {
     setToasts((current) => [...current, { id, message, tone }]);
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 4000);
   }, []);
+
+  useEffect(() => {
+    const audio = new Audio(spinMusicUrl);
+    audio.preload = "auto";
+    audio.loop = true;
+    audio.volume = 0.7;
+    spinMusicRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.currentTime = 0;
+      spinMusicRef.current = null;
+    };
+  }, []);
+
+  const startSpinMusic = () => {
+    if (!data.settings.sound) return;
+    const audio = spinMusicRef.current;
+    if (!audio) {
+      notify("Spin music is not available.", "error");
+      return;
+    }
+    audio.currentTime = 0;
+    try {
+      void audio.play().catch((error: unknown) => {
+        notify(getErrorMessage(error, "Spin music could not be played."), "error");
+      });
+    } catch (error) {
+      notify(getErrorMessage(error, "Spin music could not be played."), "error");
+    }
+  };
+
+  const stopSpinMusic = () => {
+    const audio = spinMusicRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+  };
+
+  const continueFromWinner = () => {
+    stopSpinMusic();
+    setLastWinner(null);
+  };
 
   useEffect(() => {
     if (!supabase) return;
@@ -428,6 +469,7 @@ function App() {
     if (!supabase) channelRef.current?.postMessage({ sender: tabId.current, type: "spin", busy: true });
     setLastWinner(null);
     try {
+      startSpinMusic();
       let mode: Winner["mode"];
       let index: number;
       let spinId: string | null = null;
@@ -514,6 +556,7 @@ function App() {
         catch (error) { notify(error instanceof Error ? error.message : "Winner sound could not be played.", "error"); }
       }
     } catch (error) {
+      stopSpinMusic();
       const message = error instanceof Error ? error.message : "The wheel could not complete its spin.";
       notify(message, "error");
     } finally {
@@ -590,6 +633,20 @@ function App() {
       overrideActivated: current.overrideParticipantId === id ? false : current.overrideActivated,
     }));
     return true;
+  };
+
+  const clearParticipants = () => {
+    if (spinLocked || !isOperator || data.participants.length === 0) return;
+    const count = data.participants.length;
+    if (!window.confirm(`Clear all ${count} participant${count === 1 ? "" : "s"} from the wheel? Winner history will be kept.`)) return;
+    setData((current) => ({
+      ...current,
+      participants: [],
+      overrideParticipantId: null,
+      overrideActivated: false,
+    }));
+    setStoppedWinner(null);
+    notify(`Cleared ${count} participant${count === 1 ? "" : "s"} from the wheel.`);
   };
 
   const removeDuplicateParticipantsFromList = async () => {
@@ -955,7 +1012,7 @@ function App() {
       <header className="public-topbar">
         <div className="brand">
           <span className="brand-mark"><Sparkles size={20} /></span>
-          <span>FORTUNE<span className="brand-muted"> / WHEEL</span></span>
+          <span>LUCKY<span className="brand-muted"> / DRAW</span></span>
         </div>
         <div className="public-top-actions">
           {!supabase && <button className="button button-outline" disabled={spinLocked} onClick={() => setDialog("settings")}><Settings2 size={16} /> Settings</button>}
@@ -965,9 +1022,8 @@ function App() {
         </div>
       </header>
       <section className="public-heading">
-        <div className="eyebrow"><span className="live-dot" /> LIVE DRAW EXPERIENCE</div>
+        <div className="eyebrow"><span className="live-dot" /> LIVE DRAW</div>
         <h1>{data.settings.title || "THE GRAND DRAW"}</h1>
-        <p>Every name has a chance. Let the wheel decide.</p>
       </section>
       <section className="public-content">
         <div className="public-game">
@@ -980,7 +1036,6 @@ function App() {
           <button className="spin-button" disabled={spinLocked || data.participants.length === 0} onClick={() => void startSpin()}>
             {spinLocked ? <><LoaderCircle className="button-spinner" size={19} /> SPINNING</> : <><Sparkles size={18} /> SPIN THE WHEEL</>}
           </button>
-          <div className="spin-caption"><LockKeyhole size={13} /> {spinLocked ? "Selection locked until the wheel stops" : "FAIR PLAY · ONE SPIN AT A TIME"}</div>
           <div className="public-stats"><span><strong>{data.participants.length}</strong> participants</span><i />
             <span><strong>{data.winners.length}</strong> winners drawn</span></div>
           {data.winners[0] && <div className="public-latest">
@@ -1012,9 +1067,9 @@ function App() {
           </section>
         </aside>
       </section>
-      <footer className="public-footer">YOUR EVENT. YOUR MOMENT.</footer>
+      <footer className="public-footer">Wheel of Fortune - 2026</footer>
       {lastWinner && <WinnerAnnouncement winner={lastWinner} confetti={data.settings.confetti}
-        autoRemove={data.settings.autoRemove} onClose={() => setLastWinner(null)} />}
+        autoRemove={data.settings.autoRemove} onClose={continueFromWinner} />}
       {dialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
         <section className={`dialog ${dialog === "participants" || dialog === "history" ? "dialog-wide" : ""}`} role="dialog" aria-modal="true">
           <header className="dialog-header"><div><span className="eyebrow">FORTUNE / WHEEL</span>
@@ -1139,9 +1194,8 @@ function App() {
       </header>
 
       <section className="hero-heading">
-        <div className="eyebrow"><span className="live-dot" /> LIVE DRAW EXPERIENCE</div>
+        <div className="eyebrow"><span className="live-dot" /> LIVE DRAW</div>
         <h1>{data.settings.title || "THE GRAND DRAW"}</h1>
-        <p>Every name has a chance. Let the wheel decide.</p>
       </section>
 
       <section className="game-layout">
@@ -1245,7 +1299,7 @@ function App() {
       <footer className="page-footer"><span>YOUR EVENT. YOUR MOMENT.</span><span>Session saved locally on this device <span className="saved-dot" /></span></footer>
 
       {lastWinner && <WinnerAnnouncement winner={lastWinner} confetti={data.settings.confetti}
-        autoRemove={data.settings.autoRemove} onClose={() => setLastWinner(null)} />}
+        autoRemove={data.settings.autoRemove} onClose={continueFromWinner} />}
 
       {dialog && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
         <section className={`dialog ${dialog === "participants" || dialog === "history" ? "dialog-wide" : ""}`} role="dialog" aria-modal="true">
@@ -1262,6 +1316,8 @@ function App() {
             </div>
             <div className="list-toolbar"><span>{data.participants.length} active participant{data.participants.length === 1 ? "" : "s"}</span>
               <div className="participant-file-actions">
+                <button className="button button-outline" type="button" disabled={spinLocked || !data.participants.length}
+                  onClick={clearParticipants}><Trash2 size={14} /> Clear participants</button>
                 <label className={`button button-outline file-button${spinLocked ? " is-disabled" : ""}`}><Upload size={14} /> Import Excel
                   <input type="file" accept=".xlsx,.xls,.csv" disabled={spinLocked} aria-label="Import participants from an Excel file" onChange={(event) => {
                     const file = event.target.files?.[0];
