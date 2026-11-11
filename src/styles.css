@@ -227,7 +227,7 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
 .winner-icon { width: 62px; height: 62px; display: grid; place-items: center; margin-bottom: 20px; border: 1px solid #b39252; border-radius: 50%; color: #f0d18a; background: #503c20; box-shadow: 0 0 28px #d4ad6a32; }
 .winner-modal h2 { margin: 9px 0 5px; color: #f1debb; font: 600 27px "Playfair Display", Georgia, serif; }
 .winner-name { max-width: 100%; overflow-wrap: anywhere; margin: 9px 0 17px; color: white; font: 600 clamp(27px, 6vw, 40px)/1.12 "Playfair Display", Georgia, serif; }
-.winner-removed { margin: 14px 0 0; color: #a69b98; font-size: 10px; }
+.winner-removed { margin: 14px 0 0; color: #f0d18a; font-size: 14px; font-weight: 600; line-height: 1.5; }
 .winner-actions { width: 100%; margin-top: 18px; }
 .winner-continue { width: 100%; min-height: 42px; }
 .confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }

@@ -104,6 +104,7 @@ function App() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
   const [lastWinner, setLastWinner] = useState<Winner | null>(null);
+  const [spinMusicEnabled, setSpinMusicEnabled] = useState(true);
   const [stoppedWinner, setStoppedWinner] = useState<Participant | null>(null);
   const [search, setSearch] = useState("");
   const [newName, setNewName] = useState("");
@@ -150,8 +151,8 @@ function App() {
     };
   }, []);
 
-  const startSpinMusic = () => {
-    if (!data.settings.sound) return;
+  const startSpinMusic = (enabled = spinMusicEnabled) => {
+    if (!enabled) return;
     const audio = spinMusicRef.current;
     if (!audio) {
       notify("Spin music is not available.", "error");
@@ -172,6 +173,13 @@ function App() {
     if (!audio) return;
     audio.pause();
     audio.currentTime = 0;
+  };
+
+  const toggleSpinMusic = () => {
+    const enabled = !spinMusicEnabled;
+    setSpinMusicEnabled(enabled);
+    if (enabled && (busy || remoteBusy)) startSpinMusic(true);
+    else stopSpinMusic();
   };
 
   const continueFromWinner = () => {
@@ -1035,6 +1043,11 @@ function App() {
           <span>LUCKY<span className="brand-muted"> / DRAW</span></span>
         </div>
         <div className="public-top-actions">
+          <button className="icon-button" title={spinMusicEnabled ? "Turn spin music off" : "Turn spin music on"}
+            aria-label={spinMusicEnabled ? "Turn spin music off" : "Turn spin music on"} aria-pressed={spinMusicEnabled}
+            onClick={toggleSpinMusic}>
+            {spinMusicEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+          </button>
           <button className="button button-outline" disabled={spinLocked} onClick={() => setDialog("settings")}><Settings2 size={16} /> Settings</button>
           <button className="icon-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => void toggleFullscreen()}>
             <Fullscreen size={18} />
