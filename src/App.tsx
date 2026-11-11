@@ -849,6 +849,15 @@ function App() {
     notify("Session reset.");
   };
 
+  const clearWinnerHistory = () => {
+    if (spinLocked || data.winners.length === 0) return;
+    if (!window.confirm("Clear all winner history? Participants already removed from the wheel will remain removed.")) return;
+    setData((current) => ({ ...current, winners: [] }));
+    setLastWinner(null);
+    latestWinnerObservationRef.current = null;
+    notify("Winner history cleared.");
+  };
+
   const restoreWinner = (id: string) => {
     if (spinLocked) return;
     const record = data.winners.find((entry) => entry.participant.id === id);
@@ -1275,6 +1284,8 @@ function App() {
               </span>
             </div>}
             <button className="button button-quiet history-link" disabled={spinLocked} onClick={() => setDialog("history")}><History size={15} /> View winner history</button>
+            <button className="button button-danger history-clear-link" disabled={spinLocked || !data.winners.length}
+              onClick={clearWinnerHistory}><Trash2 size={14} /> Clear winner history</button>
           </div>
         </aside>
       </section>
@@ -1428,12 +1439,8 @@ function App() {
                 </div>;
               })}</div>}
             <div className="dialog-actions history-actions">
-              <button className="button button-danger" disabled={spinLocked || !data.winners.length} onClick={() => {
-                if (window.confirm("Clear all winner history? Participants already removed from the wheel will remain removed.")) {
-                  setData((current) => ({ ...current, winners: [] }));
-                  notify("Winner history cleared.");
-                }
-              }}><Trash2 size={14} /> Clear history</button>
+              <button className="button button-danger" disabled={spinLocked || !data.winners.length}
+                onClick={clearWinnerHistory}><Trash2 size={14} /> Clear history</button>
               <button className="button button-outline" onClick={() => setDialog(null)}>Close</button>
             </div>
           </div>}

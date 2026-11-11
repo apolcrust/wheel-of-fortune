@@ -108,6 +108,7 @@ button:not(:disabled), select:not(:disabled), label.file-button { cursor: pointe
 .mode-pill { padding: 4px 7px; color: #d0ad70; border: 1px solid #655234; border-radius: 20px; background: #2a241b; font-size: 8px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .mode-controlled { color: #e2a99e; border-color: #663b37; background: #2b1d1d; }
 .history-link { width: 100%; justify-content: flex-start; margin-top: 8px; padding-left: 0; color: #b4a9a2; font-size: 10px; }
+.history-clear-link { width: 100%; justify-content: flex-start; margin-top: 4px; padding: 5px 0; font-size: 10px; }
 .utility-row { max-width: 980px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 24px auto 0; padding: 14px 0; border-top: 1px solid #2d292f; border-bottom: 1px solid #2d292f; }
 .participant-summary { display: flex; align-items: center; gap: 10px; color: #9f989d; font-size: 11px; }
 .participant-summary strong { color: #e7dfd6; font-weight: 600; }
