@@ -4,7 +4,7 @@ import type * as XLSX from "xlsx";
 import {
   Check, CircleHelp, Clock3, Download, FileSpreadsheet, Fullscreen, History, Keyboard,
   ListPlus, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, Settings2, ShieldCheck,
-  Sparkles, Trash2, Trophy, Upload, Volume2, VolumeX, X,
+  Music, Sparkles, Trash2, Trophy, Upload, VolumeX, X,
 } from "lucide-react";
 import { pickRandomIndex, targetRotation, POINTER_ANGLE, SPIN_DURATION_SECONDS } from "./engine";
 import { loadData, saveData, validateData } from "./storage";
@@ -104,7 +104,14 @@ function App() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
   const [lastWinner, setLastWinner] = useState<Winner | null>(null);
-  const [spinMusicEnabled, setSpinMusicEnabled] = useState(true);
+  const [spinMusicEnabled, setSpinMusicEnabled] = useState(() => {
+    try {
+      return window.localStorage.getItem("fortune-wheel-spin-music-muted") !== "true";
+    } catch (error) {
+      console.error("Could not read the spin music preference.", error);
+      return true;
+    }
+  });
   const [stoppedWinner, setStoppedWinner] = useState<Participant | null>(null);
   const [search, setSearch] = useState("");
   const [newName, setNewName] = useState("");
@@ -138,25 +145,15 @@ function App() {
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 4000);
   }, []);
 
-  useEffect(() => {
-    const audio = new Audio(spinMusicUrl);
-    audio.preload = "auto";
-    audio.loop = true;
-    audio.volume = 0.7;
-    spinMusicRef.current = audio;
-    return () => {
-      audio.pause();
-      audio.currentTime = 0;
-      spinMusicRef.current = null;
-    };
-  }, []);
-
   const startSpinMusic = (enabled = spinMusicEnabled) => {
     if (!enabled) return;
-    const audio = spinMusicRef.current;
+    let audio = spinMusicRef.current;
     if (!audio) {
-      notify("Spin music is not available.", "error");
-      return;
+      audio = new Audio(spinMusicUrl);
+      audio.preload = "auto";
+      audio.loop = true;
+      audio.volume = 0.7;
+      spinMusicRef.current = audio;
     }
     audio.currentTime = 0;
     try {
@@ -178,9 +175,22 @@ function App() {
   const toggleSpinMusic = () => {
     const enabled = !spinMusicEnabled;
     setSpinMusicEnabled(enabled);
+    try {
+      window.localStorage.setItem("fortune-wheel-spin-music-muted", String(!enabled));
+    } catch (error) {
+      notify(getErrorMessage(error, "The music preference could not be saved."), "error");
+    }
     if (enabled && (busy || remoteBusy)) startSpinMusic(true);
     else stopSpinMusic();
   };
+
+  useEffect(() => () => {
+    const audio = spinMusicRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    spinMusicRef.current = null;
+  }, []);
 
   const continueFromWinner = () => {
     stopSpinMusic();
@@ -1043,10 +1053,10 @@ function App() {
           <span>LUCKY<span className="brand-muted"> / DRAW</span></span>
         </div>
         <div className="public-top-actions">
-          <button className="icon-button" title={spinMusicEnabled ? "Turn spin music off" : "Turn spin music on"}
-            aria-label={spinMusicEnabled ? "Turn spin music off" : "Turn spin music on"} aria-pressed={spinMusicEnabled}
+          <button className="icon-button" title={spinMusicEnabled ? "Mute spin music" : "Enable spin music"}
+            aria-label={spinMusicEnabled ? "Mute spin music" : "Enable spin music"} aria-pressed={spinMusicEnabled}
             onClick={toggleSpinMusic}>
-            {spinMusicEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+            {spinMusicEnabled ? <Music size={18} /> : <VolumeX size={18} />}
           </button>
           <button className="button button-outline" disabled={spinLocked} onClick={() => setDialog("settings")}><Settings2 size={16} /> Settings</button>
           <button className="icon-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => void toggleFullscreen()}>
@@ -1183,7 +1193,6 @@ function App() {
                 <label><span>Segment text</span><input aria-label="Segment text color" type="color" value={data.settings.textColor} onChange={(event) => updateSettings({ textColor: event.target.value })} /></label>
                 <label><span>Segment borders</span><input aria-label="Segment border color" type="color" value={data.settings.borderColor} onChange={(event) => updateSettings({ borderColor: event.target.value })} /></label>
               </div>
-              <label className="check-setting"><input type="checkbox" checked={data.settings.sound} onChange={(event) => updateSettings({ sound: event.target.checked })} /><span>Enable spin and winner sounds</span></label>
               <button className="button button-primary settings-done" onClick={() => setDialog(null)}><Check size={15} /> Done</button>
             </fieldset>
           </div>}
@@ -1219,9 +1228,10 @@ function App() {
           </>}
           <button className="button button-outline" onClick={() => window.open(supabase && eventId ? sharedUrl(false) : import.meta.env.BASE_URL, "_blank", "noopener,noreferrer")}>Open audience screen</button>
           {supabase && session && <button className="text-button" onClick={() => void signOutOperator()}>Sign out</button>}
-          <button className="icon-button" title={data.settings.sound ? "Mute sounds" : "Enable sounds"} aria-label="Toggle sound"
-            onClick={() => updateSettings({ sound: !data.settings.sound })}>
-            {data.settings.sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
+          <button className="icon-button" title={spinMusicEnabled ? "Mute spin music" : "Enable spin music"}
+            aria-label={spinMusicEnabled ? "Mute spin music" : "Enable spin music"} aria-pressed={spinMusicEnabled}
+            onClick={toggleSpinMusic}>
+            {spinMusicEnabled ? <Music size={18} /> : <VolumeX size={18} />}
           </button>
           <button className="icon-button" title="Fullscreen" aria-label="Fullscreen" onClick={() => void toggleFullscreen()}><Fullscreen size={18} /></button>
           <button className="button button-outline" disabled={spinLocked} onClick={() => setDialog("settings")}><Settings2 size={16} /> Settings</button>
@@ -1432,7 +1442,6 @@ function App() {
               <label><span>Segment borders</span><input aria-label="Segment border color" type="color" value={data.settings.borderColor} onChange={(event) => updateSettings({ borderColor: event.target.value })} /></label>
             </div>
             <label className="check-setting"><input type="checkbox" checked={data.settings.autoRemove} onChange={(event) => updateSettings({ autoRemove: event.target.checked })} /><span>Remove each winner from the active wheel</span></label>
-            <label className="check-setting"><input type="checkbox" checked={data.settings.sound} onChange={(event) => updateSettings({ sound: event.target.checked })} /><span>Enable spin and winner sounds</span></label>
             <label className="check-setting"><input type="checkbox" checked={data.settings.confetti} onChange={(event) => updateSettings({ confetti: event.target.checked })} /><span>Celebrate winners with confetti</span></label>
             <div className="shortcut-setting"><div><strong>Desktop shortcut (optional)</strong><span>You can also activate a one-time pick with the button on the draw controls.</span></div>
               <button className="button button-outline shortcut-button" onClick={() => setCapturingShortcut(true)}>
