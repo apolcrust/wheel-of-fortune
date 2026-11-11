@@ -311,7 +311,7 @@ declare
   v_name text;
   v_override_removed boolean := false;
 begin
-  if p_action is null or p_action not in ('add', 'remove', 'deduplicate') then
+  if p_action is null or p_action not in ('add', 'remove', 'deduplicate', 'clear') then
     raise exception 'Choose a valid participant management action.';
   end if;
   if p_action = 'add' and (
@@ -375,6 +375,9 @@ begin
     from pg_catalog.jsonb_array_elements(v_participants) with ordinality as participant(value, ordinality)
     where participant.value ->> 'id' <> p_participant_id;
     v_override_removed := v_data ->> 'overrideParticipantId' = p_participant_id;
+  elsif p_action = 'clear' then
+    v_participants := '[]'::jsonb;
+    v_override_removed := true;
   else
     v_participants := '[]'::jsonb;
     for v_item in

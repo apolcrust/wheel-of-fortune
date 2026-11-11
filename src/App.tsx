@@ -566,7 +566,7 @@ function App() {
   };
 
   const updateSharedParticipants = async (
-    action: "add" | "remove" | "deduplicate",
+    action: "add" | "remove" | "deduplicate" | "clear",
     participantId?: string,
     name?: string,
   ) => {
@@ -600,7 +600,7 @@ function App() {
       try {
         await updateSharedParticipants("add", undefined, name);
       } catch (error) {
-        notify(error instanceof Error ? error.message : "The participant could not be added.", "error");
+        notify(getErrorMessage(error, "The participant could not be added."), "error");
         return;
       }
     } else {
@@ -636,17 +636,28 @@ function App() {
   };
 
   const clearParticipants = () => {
-    if (spinLocked || !isOperator || data.participants.length === 0) return;
+    if (spinLocked || data.participants.length === 0) return;
     const count = data.participants.length;
     if (!window.confirm(`Clear all ${count} participant${count === 1 ? "" : "s"} from the wheel? Winner history will be kept.`)) return;
-    setData((current) => ({
-      ...current,
-      participants: [],
-      overrideParticipantId: null,
-      overrideActivated: false,
-    }));
-    setStoppedWinner(null);
-    notify(`Cleared ${count} participant${count === 1 ? "" : "s"} from the wheel.`);
+    void (async () => {
+      if (!isOperator && supabase && eventId) {
+        try {
+          await updateSharedParticipants("clear");
+        } catch (error) {
+          notify(getErrorMessage(error, "Participants could not be cleared."), "error");
+          return;
+        }
+      } else {
+        setData((current) => ({
+          ...current,
+          participants: [],
+          overrideParticipantId: null,
+          overrideActivated: false,
+        }));
+      }
+      setStoppedWinner(null);
+      notify(`Cleared ${count} participant${count === 1 ? "" : "s"} from the wheel.`);
+    })();
   };
 
   const removeDuplicateParticipantsFromList = async () => {
@@ -1094,6 +1105,8 @@ function App() {
             {newNameAlreadyExists && <p className="duplicate-input-note" role="alert">That name is already on the wheel.</p>}
             <div className="list-toolbar"><span>{data.participants.length} active participant{data.participants.length === 1 ? "" : "s"}</span>
               <div className="participant-file-actions">
+                {!isOperator && <button className="button button-outline" type="button" disabled={spinLocked || !data.participants.length}
+                  onClick={clearParticipants}><Trash2 size={14} /> Clear participants</button>}
                 <label className={`button button-outline file-button${spinLocked ? " is-disabled" : ""}`}><Upload size={14} /> Import Excel
                   <input type="file" accept=".xlsx,.xls,.csv" disabled={spinLocked} aria-label="Import participants from an Excel file" onChange={(event) => {
                     const file = event.target.files?.[0];
