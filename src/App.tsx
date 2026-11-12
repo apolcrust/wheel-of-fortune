@@ -1156,7 +1156,6 @@ function App() {
                 <span className="participant-row-name">{person.name}</span>
                 <button className="icon-button danger-icon" aria-label={`Remove ${person.name}`} disabled={spinLocked} onClick={() => void removeParticipant(person.id)}><Trash2 size={15} /></button>
               </div>)}</div>}
-            <p className="dialog-note">New participant names are checked against the current list, ignoring letter case.</p>
           </div>}
           {dialog === "import" && <div className="dialog-content">
             {!importBook ? <div className="empty-state"><Upload size={22} /><p>Select an XLSX, XLS, or CSV file to begin.</p></div> : <>
